@@ -19,16 +19,24 @@ export NC='\033[0m'
 export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v '/mnt/' | tr '\n' ':' | sed 's/:$//')
 
 load_secrets() {
+    # GitHub Actions: los secretos vienen como variables de entorno
+    if [ -n "$ZGATE_SECRET" ]; then
+        echo -e "${GREEN}[🔐] Usando secretos de variables de entorno (GitHub Actions)${NC}"
+        return 0
+    fi
+    
+    # Build local: intentar cargar desde archivos .env
     if [ -f "$AGENT_SRC_DIR/.env" ]; then
         echo -e "${GREEN}[🔐] Cargando secretos desde $AGENT_SRC_DIR/.env ...${NC}"
         source "$AGENT_SRC_DIR/.env"
     elif [ -f ".env" ]; then
         echo -e "${GREEN}[🔐] Cargando secretos desde .env local...${NC}"
         source ".env"
+    elif [ -f ".secrets" ]; then
+        echo -e "${GREEN}[🔐] Cargando secretos desde .secrets (Docker testing)${NC}"
+        source ".secrets"
     else
-        echo -e "${RED}[⚠️] ADVERTENCIA: No se encontró archivo .env${NC}"
+        echo -e "${YELLOW}[⚠️] No se encontró archivo .env, usando valor por defecto${NC}"
         export ZGATE_SECRET="zgate-dev-default"
-        export VULTR_API_KEY=""
-        export MAX_MINUTES="60"
     fi
 }

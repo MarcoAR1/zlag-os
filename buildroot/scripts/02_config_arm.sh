@@ -151,7 +151,7 @@ else
 fi
 
 # Generar /init script con secrets
-cat > $TARGET_DIR/init << INITEOF
+cat > $TARGET_DIR/init << 'INITEOF'
 #!/bin/sh
 
 # Mount virtual filesystems
@@ -166,8 +166,13 @@ udhcpc -i eth0
 
 # Export environment variables
 export PATH=/sbin:/usr/sbin:/bin:/usr/bin
-export ZGATE_SECRET="${ZGATE_SECRET:-default-secret}"
-export MAX_MINUTES="${MAX_MINUTES:-30}"
+INITEOF
+
+# Inyectar ZGATE_SECRET desde el entorno
+echo "export ZGATE_SECRET=\"${ZGATE_SECRET:-zgate-dev-default}\"" >> $TARGET_DIR/init
+
+# Continuar con el resto del script
+cat >> $TARGET_DIR/init << 'INITEOF2'
 
 # Start Z-Gate Agent (ARM64)
 echo "Starting Z-Gate Agent (ARM64)..."
@@ -175,7 +180,7 @@ echo "Starting Z-Gate Agent (ARM64)..."
 
 # Init system
 exec /sbin/init
-INITEOF
+INITEOF2
 
 chmod +x $TARGET_DIR/init
 

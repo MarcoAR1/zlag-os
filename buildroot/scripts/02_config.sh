@@ -95,17 +95,23 @@ BR2_TARGET_GRUB2_BUILTIN_MODULES_PC="boot linux ext2 fat part_msdos part_gpt nor
 EOF
 
     # 3. SCRIPTS DE SOPORTE (Inyección de Secretos)
-    cat <<EOF > board/zgate/post_build.sh
+    cat <<'EOF' > board/zgate/post_build.sh
 #!/bin/bash
 set -e
-TARGET_DIR=\$1
-rm -rf \${TARGET_DIR}/var/run
-ln -snf ../run \${TARGET_DIR}/var/run
-mkdir -p \${TARGET_DIR}/boot/grub \${TARGET_DIR}/usr/bin \${TARGET_DIR}/sbin
-cp board/zgate/menu.cfg \${TARGET_DIR}/boot/grub/grub.cfg
+TARGET_DIR=$1
 
-# Generar /init
-cat <<REQ > \${TARGET_DIR}/init
+# Cargar secretos si existen
+if [ -f "../../.secrets" ]; then
+    source "../../.secrets"
+fi
+
+rm -rf ${TARGET_DIR}/var/run
+ln -snf ../run ${TARGET_DIR}/var/run
+mkdir -p ${TARGET_DIR}/boot/grub ${TARGET_DIR}/usr/bin ${TARGET_DIR}/sbin
+cp board/zgate/menu.cfg ${TARGET_DIR}/boot/grub/grub.cfg
+
+# Generar /init con secretos inyectados
+cat > ${TARGET_DIR}/init << 'INITEOF'
 #!/bin/sh
 # Agregamos el PATH aquí para que todo lo que venga después funcione
 export PATH=/sbin:/usr/sbin:/bin:/usr/bin
@@ -118,9 +124,13 @@ mkdir -p /run/lock /run/log /tmp
 chmod 1777 /tmp
 
 echo "--- 🚀 Z-GATE OS STARTED ---"
-export ZGATE_SECRET="${ZGATE_SECRET}"
-export VULTR_API_KEY="${VULTR_API_KEY}"
-export MAX_MINUTES="${MAX_MINUTES}"
+INITEOF
+
+# Inyectar variables de entorno
+echo "export ZGATE_SECRET=\"${ZGATE_SECRET:-zgate-dev-default}\"" >> ${TARGET_DIR}/init
+
+# Continuar con el script /init
+cat >> ${TARGET_DIR}/init << 'INITEOF2'
 
 echo "🔍 Levantando interfaces..."
 for iface in /sys/class/net/*; do
@@ -131,11 +141,14 @@ for iface in /sys/class/net/*; do
 done
 
 exec /sbin/init
-REQ
-chmod 755 \${TARGET_DIR}/init
+INITEOF2
+
+chmod 755 ${TARGET_DIR}/init
 
 # Permisos del Agente
-[ -f "\${TARGET_DIR}/usr/bin/z-gate-agent" ] && chmod +x \${TARGET_DIR}/usr/bin/z-gate-agent
+[ -f "${TARGET_DIR}/usr/bin/z-gate-agent" ] && chmod +x ${TARGET_DIR}/usr/bin/z-gate-agent
+
+echo "✓ Post-build completado con ZGATE_SECRET inyectado"
 EOF
     chmod +x board/zgate/post_build.sh
 
