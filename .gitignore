@@ -1,0 +1,21 @@
+.DS_Store
+._*
+
+# Build outputs
+buildroot/output/
+buildroot/output_arm64/
+buildroot/isos/
+buildroot/dl/
+*.iso
+*.ext4
+
+# Logs
+*.log
+
+# Secrets (never commit)
+.secrets
+buildroot/.secrets
+*.env
+
+# Cache
+.cache/

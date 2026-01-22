@@ -1,0 +1,286 @@
+name: Build Z-Gate Buildroot ISOs
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'buildroot/**'
+      - 'bin/**'
+      - '.github/workflows/build-iso.yml'
+  
+  workflow_dispatch:
+  
+  # Trigger desde repo privado via webhook
+  repository_dispatch:
+    types: [build-isos]
+
+env:
+  ZGATE_SECRET: ${{ secrets.ZGATE_SECRET }}
+  VULTR_API_KEY: ${{ secrets.VULTR_API_KEY }}
+
+jobs:
+  build-x86_64:
+    name: Build x86_64 ISO (Vultr)
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Buildroot dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libncurses5-dev \
+            git \
+            bc \
+            wget \
+            cpio \
+            unzip \
+            rsync \
+            file \
+            python3
+
+      - name: Cache Buildroot downloads
+        uses: actions/cache@v3
+        with:
+          path: buildroot/dl
+          key: buildroot-dl-x86-${{ hashFiles('buildroot/configs/zgate_defconfig') }}
+          restore-keys: |
+            buildroot-dl-x86-
+
+      - name: Verify agent binary exists
+        run: |
+          if [ ! -f bin/z-gate-agent-x86_64 ]; then
+            echo "❌ Error: Agent binary not found in bin/"
+            echo "Run 'make update-agent' in private repo first"
+            exit 1
+          fi
+          
+          # Copy to buildroot overlay
+          mkdir -p buildroot/board/zgate/rootfs-overlay/usr/bin/
+          cp bin/z-gate-agent-x86_64 buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent
+          chmod +x buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent
+          
+          ls -lh buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent
+
+      - name: Create secrets file
+        run: |
+          cd buildroot
+          mkdir -p .secrets
+          cat > .secrets <<EOF
+          export ZGATE_SECRET="${{ secrets.ZGATE_SECRET }}"
+          export VULTR_API_KEY="${{ secrets.VULTR_API_KEY }}"
+          export MAX_MINUTES="120"
+          EOF
+
+      - name: Build Buildroot ISO (x86_64)
+        run: |
+          cd buildroot
+          ./setup.sh update
+
+      - name: Calculate ISO hash
+        id: hash
+        run: |
+          cd buildroot/isos/vultr-x86_64
+          SHA256=$(sha256sum zgate-vultr-x86_64.iso | cut -d' ' -f1)
+          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHA256:0:8}" >> $GITHUB_OUTPUT
+          
+          SIZE=$(du -h zgate-vultr-x86_64.iso | cut -f1)
+          echo "size=${SIZE}" >> $GITHUB_OUTPUT
+          
+          echo "✅ ISO x86_64: ${SIZE} - SHA256: ${SHA256:0:16}..."
+
+      - name: Upload x86_64 ISO artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: zgate-vultr-x86_64-iso
+          path: |
+            buildroot/isos/vultr-x86_64/zgate-vultr-x86_64.iso
+            buildroot/isos/vultr-x86_64/checksums.txt
+          retention-days: 90
+
+    outputs:
+      sha256: ${{ steps.hash.outputs.sha256 }}
+      short_sha: ${{ steps.hash.outputs.short_sha }}
+      size: ${{ steps.hash.outputs.size }}
+
+  build-arm64:
+    name: Build ARM64 Image (Oracle Cloud)
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install ARM64 cross-compilation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libncurses5-dev \
+            git \
+            bc \
+            wget \
+            cpio \
+            unzip \
+            rsync \
+            file \
+            python3 \
+            gcc-aarch64-linux-gnu
+
+      - name: Cache Buildroot downloads (ARM64)
+        uses: actions/cache@v3
+        with:
+          path: buildroot/dl
+          key: buildroot-dl-arm64-${{ hashFiles('buildroot/configs/zgate_arm64_defconfig') }}
+          restore-keys: |
+            buildroot-dl-arm64-
+
+      - name: Verify agent binary exists
+        run: |
+          if [ ! -f bin/z-gate-agent-arm64 ]; then
+            echo "❌ Error: Agent ARM64 binary not found in bin/"
+            echo "Run 'make update-agent' in private repo first"
+            exit 1
+          fi
+          
+          # Copy to buildroot overlay
+          mkdir -p buildroot/board/zgate/rootfs-overlay/usr/bin/
+          cp bin/z-gate-agent-arm64 buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent-arm64
+          chmod +x buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent-arm64
+          
+          ls -lh buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent-arm64
+
+      - name: Create secrets file
+        run: |
+          cd buildroot
+          mkdir -p .secrets
+          cat > .secrets <<EOF
+          export ZGATE_SECRET="${{ secrets.ZGATE_SECRET }}"
+          export VULTR_API_KEY="${{ secrets.VULTR_API_KEY }}"
+          export MAX_MINUTES="120"
+          EOF
+
+      - name: Build Buildroot Image (ARM64)
+        run: |
+          cd buildroot
+          ./setup_arm.sh update
+
+      - name: Calculate image hash
+        id: hash
+        run: |
+          cd buildroot/isos/oracle-arm64
+          SHA256=$(sha256sum zgate-oracle-arm64.ext4 | cut -d' ' -f1)
+          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHA256:0:8}" >> $GITHUB_OUTPUT
+          
+          SIZE=$(du -h zgate-oracle-arm64.ext4 | cut -f1)
+          echo "size=${SIZE}" >> $GITHUB_OUTPUT
+          
+          echo "✅ Image ARM64: ${SIZE} - SHA256: ${SHA256:0:16}..."
+
+      - name: Upload ARM64 image artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: zgate-oracle-arm64-image
+          path: |
+            buildroot/isos/oracle-arm64/zgate-oracle-arm64.ext4
+            buildroot/isos/oracle-arm64/checksums.txt
+          retention-days: 90
+
+    outputs:
+      sha256: ${{ steps.hash.outputs.sha256 }}
+      short_sha: ${{ steps.hash.outputs.short_sha }}
+      size: ${{ steps.hash.outputs.size }}
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-x86_64, build-arm64]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Download x86_64 artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: zgate-vultr-x86_64-iso
+          path: ./x86_64
+
+      - name: Download ARM64 artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: zgate-oracle-arm64-image
+          path: ./arm64
+
+      - name: Generate release tag
+        id: tag
+        run: |
+          TAG="iso-$(date +%Y%m%d-%H%M)-${GITHUB_SHA:0:8}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Release tag: ${TAG}"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "Z-Gate ISOs - $(date +%Y-%m-%d)"
+          body: |
+            # 🚀 Z-Gate Buildroot ISOs
+            
+            **Commit**: `${{ github.sha }}`  
+            **Date**: $(date -u +"%Y-%m-%d %H:%M UTC")
+            
+            ## 📦 Downloads
+            
+            ### x86_64 (Vultr VPS)
+            - **Size**: ${{ needs.build-x86_64.outputs.size }}
+            - **SHA256**: `${{ needs.build-x86_64.outputs.sha256 }}`
+            
+            ### ARM64 (Oracle Cloud)
+            - **Size**: ${{ needs.build-arm64.outputs.size }}
+            - **SHA256**: `${{ needs.build-arm64.outputs.sha256 }}`
+            
+            ## 🎯 Usage
+            
+            Brain downloads these ISOs automatically from GitHub Releases.
+            
+            ```bash
+            # In private repo
+            cd zgate
+            ./zgate -region sao
+            ```
+            
+            ## 🔐 Verification
+            
+            ```bash
+            sha256sum zgate-vultr-x86_64.iso
+            # ${{ needs.build-x86_64.outputs.sha256 }}
+            ```
+          files: |
+            ./x86_64/zgate-vultr-x86_64.iso
+            ./x86_64/checksums.txt
+            ./arm64/zgate-oracle-arm64.ext4
+            ./arm64/checksums.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  summary:
+    name: Build Summary
+    needs: [build-x86_64, build-arm64, create-release]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# 🏗️ Z-Gate Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Architecture | Status | Size | SHA256 |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------------|--------|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| x86_64 | ${{ needs.build-x86_64.result }} | ${{ needs.build-x86_64.outputs.size }} | \`${{ needs.build-x86_64.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| ARM64 | ${{ needs.build-arm64.result }} | ${{ needs.build-arm64.outputs.size }} | \`${{ needs.build-arm64.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
