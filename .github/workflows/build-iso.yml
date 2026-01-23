@@ -25,7 +25,7 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Buildroot dependencies
         run: |
@@ -43,7 +43,7 @@ jobs:
             python3
 
       - name: Cache Buildroot downloads
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: buildroot/dl
           key: buildroot-dl-x86-${{ hashFiles('buildroot/configs/zgate_defconfig') }}
@@ -94,7 +94,7 @@ jobs:
           echo "✅ ISO x86_64: ${SIZE} - SHA256: ${SHA256:0:16}..."
 
       - name: Upload x86_64 ISO artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v6
         with:
           name: zgate-vultr-x86_64-iso
           path: |
@@ -113,7 +113,7 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install ARM64 cross-compilation tools
         run: |
@@ -132,7 +132,7 @@ jobs:
             gcc-aarch64-linux-gnu
 
       - name: Cache Buildroot downloads (ARM64)
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: buildroot/dl
           key: buildroot-dl-arm64-${{ hashFiles('buildroot/configs/zgate_arm64_defconfig') }}
@@ -183,7 +183,7 @@ jobs:
           echo "✅ Image ARM64: ${SIZE} - SHA256: ${SHA256:0:16}..."
 
       - name: Upload ARM64 image artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v6
         with:
           name: zgate-oracle-arm64-image
           path: |
@@ -204,13 +204,13 @@ jobs:
     
     steps:
       - name: Download x86_64 artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v7
         with:
           name: zgate-vultr-x86_64-iso
           path: ./x86_64
 
       - name: Download ARM64 artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v7
         with:
           name: zgate-oracle-arm64-image
           path: ./arm64
@@ -223,7 +223,7 @@ jobs:
           echo "Release tag: ${TAG}"
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: "Z-Gate ISOs - $(date +%Y-%m-%d)"
