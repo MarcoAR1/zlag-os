@@ -42,14 +42,6 @@ RUN chmod +x /usr/local/bin/entrypoint.sh && \
 RUN chown -R builder:builder /workspace && \
     chown -R builder:builder /buildroot
 
-# Pre-generar configuraciones ejecutando los scripts de configuración
-USER builder
-WORKDIR /buildroot
-
-# Ejecutar script de configuración para generar todos los archivos necesarios
-RUN bash -c "source scripts/00_env.sh && source scripts/02_config.sh && configure_system"
-RUN bash -c "source scripts/00_env.sh && source scripts/02_config_arm.sh && configure_system_arm"
-
 # ==============================================================================
 # Entrypoint
 # ==============================================================================

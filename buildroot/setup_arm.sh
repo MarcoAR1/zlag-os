@@ -80,8 +80,18 @@ run_full_build() {
 run_update() {
     echo -e "${YELLOW}[⚡] Actualización Rápida ARM64...${NC}"
     configure_system_arm # Regenerar configs
-    make O=$OUTPUT_DIR zgate_arm64_defconfig
-    make O=$OUTPUT_DIR -j$JOBS
+    
+    # Detectar si output existe (restaurado desde caché)
+    if [ -d "$OUTPUT_DIR" ] && [ -f "$OUTPUT_DIR/.config" ]; then
+        echo -e "${GREEN}[📦] Output directory detected (from cache), skipping full rebuild${NC}"
+        echo -e "${BLUE}[🔧] Regenerating defconfig and rebuilding only changed files...${NC}"
+        make O=$OUTPUT_DIR zgate_arm64_defconfig
+        make O=$OUTPUT_DIR -j$JOBS  # Solo recompila lo que cambió (agente + configs)
+    else
+        echo -e "${YELLOW}[🔨] No cache found, running full build...${NC}"
+        make O=$OUTPUT_DIR zgate_arm64_defconfig
+        make O=$OUTPUT_DIR -j$JOBS
+    fi
 }
 
 # --- CONTROLADOR PRINCIPAL ---

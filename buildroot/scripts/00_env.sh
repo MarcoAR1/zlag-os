@@ -24,9 +24,9 @@ export NC='\033[0m'
 export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v '/mnt/' | tr '\n' ':' | sed 's/:$//')
 
 load_secrets() {
-    # GitHub Actions: los secretos vienen como variables de entorno
-    if [ -n "$ZGATE_SECRET" ]; then
-        echo -e "${GREEN}[🔐] Usando secretos de variables de entorno (GitHub Actions)${NC}"
+    # GitHub Actions / Docker: los secretos vienen como variables de entorno
+    if [ -n "${ZGATE_SECRET:-}" ]; then
+        echo -e "${GREEN}[🔐] Usando secretos de variables de entorno (GitHub Actions/Docker)${NC}"
         return 0
     fi
     

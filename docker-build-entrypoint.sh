@@ -42,46 +42,40 @@ verify_binaries() {
 
 # Copiar configuración del proyecto a Buildroot
 sync_config() {
-    echo -e "${BLUE}📦 Sincronizando binarios del agent...${NC}"
+    local ARCH=$1
+    echo -e "${BLUE}📦 Sincronizando binario del agent para ${ARCH}...${NC}"
     
     cd /buildroot
     
     # Crear directorio overlay si no existe
     mkdir -p board/zgate/rootfs-overlay/usr/bin
     
-    # Copiar binarios desde workspace montado (si existe)
+    # Copiar solo el binario necesario según la arquitectura
     if [[ -d "/workspace/bin" ]]; then
-        echo -e "${GREEN}✓ Copiando binarios del agent desde /workspace/bin${NC}"
-        
-        if [[ -f "/workspace/bin/z-gate-agent-x86_64" ]]; then
-            cp /workspace/bin/z-gate-agent-x86_64 board/zgate/rootfs-overlay/usr/bin/z-gate-agent
-            chmod +x board/zgate/rootfs-overlay/usr/bin/z-gate-agent
-            echo -e "${GREEN}  → z-gate-agent (x86_64) copiado${NC}"
-        else
-            echo -e "${YELLOW}  ⚠ z-gate-agent-x86_64 no encontrado${NC}"
-        fi
-        
-        if [[ -f "/workspace/bin/z-gate-agent-arm64" ]]; then
-            cp /workspace/bin/z-gate-agent-arm64 board/zgate/rootfs-overlay/usr/bin/z-gate-agent-arm64
-            chmod +x board/zgate/rootfs-overlay/usr/bin/z-gate-agent-arm64
-            echo -e "${GREEN}  → z-gate-agent-arm64 copiado${NC}"
-        else
-            echo -e "${YELLOW}  ⚠ z-gate-agent-arm64 no encontrado${NC}"
+        if [[ "$ARCH" == "x86_64" ]]; then
+            if [[ -f "/workspace/bin/z-gate-agent-x86_64" ]]; then
+                cp /workspace/bin/z-gate-agent-x86_64 board/zgate/rootfs-overlay/usr/bin/z-gate-agent
+                chmod +x board/zgate/rootfs-overlay/usr/bin/z-gate-agent
+                echo -e "${GREEN}✓ z-gate-agent (x86_64) copiado${NC}"
+            else
+                echo -e "${RED}❌ z-gate-agent-x86_64 no encontrado${NC}"
+                exit 1
+            fi
+        elif [[ "$ARCH" == "arm64" ]]; then
+            if [[ -f "/workspace/bin/z-gate-agent-arm64" ]]; then
+                cp /workspace/bin/z-gate-agent-arm64 board/zgate/rootfs-overlay/usr/bin/z-gate-agent-arm64
+                chmod +x board/zgate/rootfs-overlay/usr/bin/z-gate-agent-arm64
+                echo -e "${GREEN}✓ z-gate-agent (arm64) copiado${NC}"
+            else
+                echo -e "${RED}❌ z-gate-agent-arm64 no encontrado${NC}"
+                exit 1
+            fi
         fi
     else
         echo -e "${RED}❌ /workspace/bin no encontrado${NC}"
         echo -e "${YELLOW}Asegúrate de montar el volumen: -v \$(pwd):/workspace${NC}"
         exit 1
     fi
-    
-    # Verificar que las configuraciones existen (ya fueron pre-generadas)
-    if [[ ! -f "configs/zgate_defconfig" ]]; then
-        echo -e "${RED}❌ configs/zgate_defconfig no existe${NC}"
-        echo -e "${YELLOW}Las configuraciones deberían haberse generado en el Dockerfile${NC}"
-        exit 1
-    fi
-    
-    echo -e "${GREEN}✓ Configuraciones verificadas${NC}"
 }
 
 # Build x86_64
@@ -111,18 +105,21 @@ build_arm64() {
 # Main
 banner
 verify_binaries
-sync_config
 
 case "${1:-both}" in
     x86_64)
+        sync_config "x86_64"
         build_x86_64
         ;;
     arm64)
+        sync_config "arm64"
         build_arm64
         ;;
     both)
+        sync_config "x86_64"
         build_x86_64
         echo ""
+        sync_config "arm64"
         build_arm64
         ;;
     *)

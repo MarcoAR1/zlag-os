@@ -94,6 +94,20 @@ jobs:
           chmod +x validate.sh
           ./validate.sh
       
+      # ============================================================
+      # CACHE AGRESIVO: Buildroot output (kernel + 200+ packages)
+      # Invalida solo si cambian configs, NO por cambios en agente
+      # ============================================================
+      - name: Cache Buildroot x86_64 output
+        uses: actions/cache@v5
+        with:
+          path: |
+            buildroot/output/
+            buildroot/dl/
+          key: buildroot-x86_64-${{ hashFiles('buildroot/scripts/02_config.sh', 'buildroot/board/zgate/*.fragment', 'buildroot/configs/zgate_defconfig') }}
+          restore-keys: |
+            buildroot-x86_64-
+      
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -138,6 +152,20 @@ jobs:
           cd bin
           chmod +x validate.sh
           ./validate.sh
+      
+      # ============================================================
+      # CACHE AGRESIVO: Buildroot output (kernel + 200+ packages)
+      # Invalida solo si cambian configs, NO por cambios en agente
+      # ============================================================
+      - name: Cache Buildroot ARM64 output
+        uses: actions/cache@v5
+        with:
+          path: |
+            buildroot/output_arm64/
+            buildroot/dl/
+          key: buildroot-arm64-${{ hashFiles('buildroot/scripts/02_config_arm.sh', 'buildroot/board/zgate/*.fragment', 'buildroot/configs/zgate_arm64_defconfig') }}
+          restore-keys: |
+            buildroot-arm64-
       
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3

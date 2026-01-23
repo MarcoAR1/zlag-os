@@ -82,8 +82,17 @@ run_update() {
     # Asegurar PATH limpio antes de make
     echo "Cleaned PATH for make: $PATH"
     
-    make zgate_defconfig
-    make -j$JOBS
+    # Detectar si output existe (restaurado desde caché)
+    if [ -d "output" ] && [ -f "output/.config" ]; then
+        echo -e "${GREEN}[📦] Output directory detected (from cache), skipping full rebuild${NC}"
+        echo -e "${BLUE}[🔧] Regenerating defconfig and rebuilding only changed files...${NC}"
+        make zgate_defconfig
+        make -j$JOBS  # Solo recompila lo que cambió (agente + configs)
+    else
+        echo -e "${YELLOW}[🔨] No cache found, running full build...${NC}"
+        make zgate_defconfig
+        make -j$JOBS
+    fi
 }
 
 # --- CONTROLADOR PRINCIPAL ---
