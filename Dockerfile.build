@@ -12,6 +12,9 @@
 ARG BASE_IMAGE=zgate-buildroot-base:latest
 FROM ${BASE_IMAGE}
 
+# Configurar TERM para entornos no-interactivos
+ENV TERM=linux
+
 USER root
 
 # ==============================================================================
