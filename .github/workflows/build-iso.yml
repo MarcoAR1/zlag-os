@@ -16,7 +16,6 @@ on:
 
 env:
   ZGATE_SECRET: ${{ secrets.ZGATE_SECRET }}
-  VULTR_API_KEY: ${{ secrets.VULTR_API_KEY }}
 
 jobs:
   build-x86_64:
@@ -68,10 +67,8 @@ jobs:
       - name: Create secrets file
         run: |
           cd buildroot
-          mkdir -p .secrets
           cat > .secrets <<EOF
           export ZGATE_SECRET="${{ secrets.ZGATE_SECRET }}"
-          export VULTR_API_KEY="${{ secrets.VULTR_API_KEY }}"
           export MAX_MINUTES="120"
           EOF
 
@@ -157,10 +154,8 @@ jobs:
       - name: Create secrets file
         run: |
           cd buildroot
-          mkdir -p .secrets
           cat > .secrets <<EOF
           export ZGATE_SECRET="${{ secrets.ZGATE_SECRET }}"
-          export VULTR_API_KEY="${{ secrets.VULTR_API_KEY }}"
           export MAX_MINUTES="120"
           EOF
 
