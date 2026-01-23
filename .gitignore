@@ -12,10 +12,18 @@ buildroot/dl/
 # Logs
 *.log
 
-# Secrets (never commit)
+# Secrets (never commit) - CRITICAL: Never commit these files
 .secrets
 buildroot/.secrets
+*.secrets
+**/.secrets
 *.env
+*.key
+*.pem
+*.crt
+secrets/
+secrets.yml
+secrets.yaml
 
 # Cache
 .cache/

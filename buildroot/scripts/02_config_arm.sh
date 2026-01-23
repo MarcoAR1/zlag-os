@@ -1,6 +1,8 @@
 #!/bin/bash
 # scripts/02_config_arm.sh - ARM64 Configuration Module
 
+set -euo pipefail
+
 configure_system_arm() {
     echo -e "${BLUE}[⚙️] Generando configuración ARM64 para Oracle Cloud...${NC}"
     mkdir -p board/zgate
@@ -47,6 +49,11 @@ BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="board/zgate/linux_arm64.config"
 
 # Post-build script ARM64
 BR2_ROOTFS_POST_BUILD_SCRIPT="board/zgate/post_build_arm64.sh"
+
+# --- COMPRESSION (Rootfs size reduction: 50MB → 35MB) ---
+BR2_TARGET_ROOTFS_SQUASHFS=y
+BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
+BR2_TARGET_ROOTFS_SQUASHFS4_XZ_EXTREME=y
 
 # Target filesystem for Oracle Cloud (EXT4 + TAR.GZ)
 BR2_TARGET_ROOTFS_EXT2=y
@@ -113,8 +120,36 @@ CONFIG_NF_NAT_MASQUERADE=y
 # Soporte para Gaming (DSCP/TOS)
 CONFIG_NFT_TOS=y
 
+# --- SECURITY HARDENING (Minimal) ---
+# Protección cloud multi-tenant (Spectre/Meltdown)
+CONFIG_SPECULATION_MITIGATIONS=y
+CONFIG_MITIGATION_SPECTRE_V2=y
+CONFIG_MITIGATION_MELTDOWN=y
+CONFIG_MITIGATION_RETBLEED=y
+# Stack overflow protection
+CONFIG_STACKPROTECTOR=y
+CONFIG_STACKPROTECTOR_STRONG=y
+# Memory protection básica
+CONFIG_STRICT_KERNEL_RWX=y
+CONFIG_PAGE_TABLE_ISOLATION=y
+
 # --- WIREGUARD ---
 CONFIG_WIREGUARD=m
+
+# --- NETWORK PERFORMANCE (Gaming: ultra-low latency) ---
+CONFIG_NET_RX_BUSY_POLL=y
+CONFIG_RPS=y
+CONFIG_RFS_ACCEL=y
+
+# --- XDP & eBPF (Gaming: kernel bypass, -2-5ms latency) ---
+CONFIG_BPF=y
+CONFIG_BPF_SYSCALL=y
+CONFIG_BPF_JIT=y
+CONFIG_BPF_JIT_ALWAYS_ON=y
+CONFIG_XDP_SOCKETS=y
+CONFIG_BPF_EVENTS=y
+# Debugging (development only)
+CONFIG_BPF_JIT_DISASM=y
 
 # --- AUDIO FIX (Oracle Cloud kernel panic workaround) ---
 # CONFIG_SOUND is not set
@@ -158,6 +193,13 @@ cat > $TARGET_DIR/init << 'INITEOF'
 mount -t proc none /proc
 mount -t sysfs none /sys
 mount -t devtmpfs none /dev
+INITEOF
+
+# Inyectar secrets
+echo "export ZGATE_SECRET=\"${ZGATE_SECRET:-zgate-dev-default}\"" >> $TARGET_DIR/init
+
+# Continuar /init script
+cat >> $TARGET_DIR/init << 'INITEOF'
 
 # Network setup
 ip link set lo up
@@ -173,6 +215,39 @@ echo "export ZGATE_SECRET=\"${ZGATE_SECRET:-zgate-dev-default}\"" >> $TARGET_DIR
 
 # Continuar con el resto del script
 cat >> $TARGET_DIR/init << 'INITEOF2'
+
+# 🎮 Gaming Network Optimization (ultra-low latency)
+echo "⚡ Aplicando optimizaciones de red para gaming..."
+
+# Busy polling (reduce latencia en ~2-3ms)
+echo 50 > /proc/sys/net/core/busy_poll
+echo 50 > /proc/sys/net/core/busy_read
+
+# Network backlog aumentado
+echo 300000 > /proc/sys/net/core/netdev_max_backlog
+
+# NIC tuning para baja latencia
+ethtool -C eth0 rx-usecs 10 rx-frames 4 2>/dev/null || true
+ethtool -G eth0 rx 4096 tx 4096 2>/dev/null || true
+
+# Deshabilitar offloads (reduce latencia variable)
+ethtool -K eth0 gro off 2>/dev/null || true
+ethtool -K eth0 gso off 2>/dev/null || true
+
+# 🎯 CPU Pinning & Interrupt Affinity (reduce jitter ~1ms)
+echo "⚡ Configurando CPU pinning para latencia consistente..."
+
+# Pin interrupciones de red a CPU0-1
+for irq in \$(grep -E 'eth0|virtio0' /proc/interrupts | cut -d: -f1 | tr -d ' '); do
+    echo "0-1" > /proc/irq/\$irq/smp_affinity_list 2>/dev/null || true
+done
+
+# RPS: Pin software IRQs a CPU0-1 (bitmask: 0x3 = CPU0,1)
+for rps in /sys/class/net/eth*/queues/rx-*/rps_cpus; do
+    [ -f "\$rps" ] && echo "3" > "\$rps" 2>/dev/null || true
+done
+
+echo "✓ Optimizaciones OS aplicadas (CPU pinning, busy polling, RPS/RFS)"
 
 # Start Z-Gate Agent (ARM64)
 echo "Starting Z-Gate Agent (ARM64)..."

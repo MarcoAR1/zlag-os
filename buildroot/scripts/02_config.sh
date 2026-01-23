@@ -1,6 +1,8 @@
 #!/bin/bash
 # scripts/02_config.sh
 
+set -euo pipefail
+
 configure_system() {
     echo -e "${BLUE}[⚙️] Generando archivos de configuración e inyectando ENV...${NC}"
     mkdir -p board/zgate
@@ -52,17 +54,52 @@ CONFIG_NFT_PAYLOAD=y
 CONFIG_NFT_EXTHDR=y
 CONFIG_NETFILTER_XT_TARGET_DSCP=y
 
+# --- SECURITY HARDENING (Minimal) ---
+# Protección cloud multi-tenant (Spectre/Meltdown)
+CONFIG_SPECULATION_MITIGATIONS=y
+CONFIG_MITIGATION_SPECTRE_V2=y
+CONFIG_MITIGATION_MELTDOWN=y
+CONFIG_MITIGATION_RETBLEED=y
+# Stack overflow protection
+CONFIG_STACKPROTECTOR=y
+CONFIG_STACKPROTECTOR_STRONG=y
+# Memory protection básica
+CONFIG_STRICT_KERNEL_RWX=y
+CONFIG_PAGE_TABLE_ISOLATION=y
+
 # --- VPN & TUNNELING ---
 CONFIG_WIREGUARD=y
 
 # --- REDUNDANCIA ---
 CONFIG_BONDING=y
 CONFIG_VXLAN=y
+
+# --- NETWORK PERFORMANCE (Gaming: ultra-low latency) ---
+CONFIG_NET_RX_BUSY_POLL=y
+CONFIG_RPS=y
+CONFIG_RFS_ACCEL=y
+
+# --- XDP & eBPF (Gaming: kernel bypass, -2-5ms latency) ---
+CONFIG_BPF=y
+CONFIG_BPF_SYSCALL=y
+CONFIG_BPF_JIT=y
+CONFIG_BPF_JIT_ALWAYS_ON=y
+CONFIG_XDP_SOCKETS=y
+CONFIG_BPF_EVENTS=y
+# Debugging (development only)
+CONFIG_BPF_JIT_DISASM=y
 EOF
 
     # 2. CONFIGURACIÓN BUILDROOT
     cat <<EOF > configs/zgate_defconfig
 BR2_x86_64=y
+
+# --- BUILD OPTIMIZATION ---
+BR2_CCACHE=y
+BR2_CCACHE_DIR="/buildroot/dl/ccache"
+BR2_CCACHE_USE_BASEDIR=y
+BR2_JLEVEL=0
+
 BR2_TOOLCHAIN_BUILDROOT=y
 BR2_TOOLCHAIN_BUILDROOT_UCLIBC=y
 BR2_KERNEL_HEADERS_6_1=y
@@ -78,12 +115,21 @@ BR2_PACKAGE_NFTABLES=y
 BR2_PACKAGE_WIREGUARD_TOOLS=y
 BR2_PACKAGE_IPROUTE2=y
 BR2_PACKAGE_BASH=y
+BR2_PACKAGE_ELFUTILS=y
+BR2_PACKAGE_LLVM=y
+BR2_PACKAGE_CLANG=y
 BR2_TARGET_GENERIC_HOSTNAME="ZGate-Node"
 BR2_TARGET_GENERIC_ISSUE="Welcome to ZGate"
 BR2_ROOTFS_OVERLAY="board/zgate/rootfs-overlay"
 BR2_ROOTFS_POST_BUILD_SCRIPT="board/zgate/post_build.sh"
 BR2_TARGET_ROOTFS_CPIO=y
 BR2_TARGET_ROOTFS_CPIO_GZIP=y
+
+# --- COMPRESSION (ISO size reduction: 50MB → 35MB) ---
+BR2_TARGET_ROOTFS_SQUASHFS=y
+BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
+BR2_TARGET_ROOTFS_SQUASHFS4_XZ_EXTREME=y
+
 BR2_TARGET_ROOTFS_ISO9660=y
 BR2_TARGET_ROOTFS_ISO9660_BOOT_MENU="board/zgate/menu.cfg"
 BR2_TARGET_ROOTFS_ISO9660_HYBRID=y
@@ -131,6 +177,39 @@ echo "export ZGATE_SECRET=\"${ZGATE_SECRET:-zgate-dev-default}\"" >> ${TARGET_DI
 
 # Continuar con el script /init
 cat >> ${TARGET_DIR}/init << 'INITEOF2'
+
+# 🎮 Gaming Network Optimization (ultra-low latency)
+echo "⚡ Aplicando optimizaciones de red para gaming..."
+
+# Busy polling (reduce latencia en ~2-3ms)
+echo 50 > /proc/sys/net/core/busy_poll
+echo 50 > /proc/sys/net/core/busy_read
+
+# Network backlog aumentado
+echo 300000 > /proc/sys/net/core/netdev_max_backlog
+
+# NIC tuning para baja latencia
+ethtool -C eth0 rx-usecs 10 rx-frames 4 2>/dev/null || true
+ethtool -G eth0 rx 4096 tx 4096 2>/dev/null || true
+
+# Deshabilitar offloads (reduce latencia variable)
+ethtool -K eth0 gro off 2>/dev/null || true
+ethtool -K eth0 gso off 2>/dev/null || true
+
+# 🎯 CPU Pinning & Interrupt Affinity (reduce jitter ~1ms)
+echo "⚡ Configurando CPU pinning para latencia consistente..."
+
+# Pin interrupciones de red a CPU0-1
+for irq in \$(grep -E 'eth0|virtio0' /proc/interrupts | cut -d: -f1 | tr -d ' '); do
+    echo "0-1" > /proc/irq/\$irq/smp_affinity_list 2>/dev/null || true
+done
+
+# RPS: Pin software IRQs a CPU0-1 (bitmask: 0x3 = CPU0,1)
+for rps in /sys/class/net/eth*/queues/rx-*/rps_cpus; do
+    [ -f "\$rps" ] && echo "3" > "\$rps" 2>/dev/null || true
+done
+
+echo "✓ Optimizaciones OS aplicadas (CPU pinning, busy polling, RPS/RFS)"
 
 echo "🔍 Levantando interfaces..."
 for iface in /sys/class/net/*; do

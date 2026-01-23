@@ -1,102 +1,87 @@
-# Z-Gate OS - Buildroot ISO Builder
+# Z-Gate OS
 
-> 🔒 **Public repo** for building Z-Gate operating system ISOs.  
-> 🔐 **Private logic** in main repository (Brain/Agent code).
+> 🚀 **Linux OS minimal** optimizado para baja latencia  
+> 📦 **Buildroot-based**: ~50MB ISOs/rootfs  
+> 🔧 **Network-focused**: Stack de red optimizado
 
-## 📦 What This Repo Does
+## 📦 Qué genera este proyecto
 
-Compiles minimal Linux ISOs for Z-Gate VPN nodes:
+ISOs y rootfs de Linux minimal:
 
-- **x86_64** → Vultr VPS (~50MB)
-- **ARM64** → Oracle Cloud Ampere A1 (~50MB)
+- **x86_64 ISO** → ~50MB (cloud VMs)
+- **ARM64 rootfs** → ~50MB (ARM instances)
+
+Optimizado para aplicaciones donde la latencia de red es importante.
+
+Ver [PROJECT.md](PROJECT.md) para detalles técnicos.
 
 ## 🚀 Quick Start
 
-### For Contributors (Public)
-
-This repo contains:
-- ✅ Buildroot configurations
-- ✅ Pre-compiled agent binaries (`bin/`)
-- ✅ Build scripts and Dockerfile
-- ❌ NO source code of Brain/Agent (private)
-
-### For Z-Gate Developers (Private Repo Access)
-
-See workflow documentation in private repo.
-
-## 🏗️ Build Process
-
-### Automatic (GitHub Actions)
-
-Every push to `main` triggers:
-1. Build x86_64 ISO (30-40 min)
-2. Build ARM64 image (40-60 min)
-3. Create GitHub Release with ISOs
-4. Brain downloads from releases automatically
-
-### Manual (Local with Docker)
+### Build Locally (Docker)
 
 ```bash
-# Build x86_64
-cd buildroot
-./docker-build.sh update x86_64
+# 1. Build test environment (first time only)
+./test-build.sh build
 
-# Build ARM64
-./docker-build.sh update arm64
+# 2. Generate ISOs
+./test-build.sh both          # Both architectures
+./test-build.sh x86_64        # x86_64 only (faster)
+./test-build.sh arm64         # ARM64 only
+
+# 3. Validate output
+./validate-iso.sh output/zgate-os-x86_64.iso
 ```
 
-## 📁 Structure
+### Automated Builds (GitHub Actions)
+
+Every push to `main` triggers automated build:
+1. Build base Docker image
+2. Build x86_64 ISO (parallel)
+3. Build ARM64 rootfs (parallel)
+4. Create GitHub Release with artifacts
+./test-build.sh verify
+./validate-iso.sh both
+```
+
+## 📁 Repository Structure
 
 ```
 zgate-os/
-├── bin/                          # Pre-compiled agent binaries
-│   ├── z-gate-agent-x86_64      # From private repo
-│   └── z-gate-agent-arm64       # From private repo
-├── buildroot/                    # Buildroot configs
-│   ├── configs/
-│   ├── board/zgate/
-│   └── scripts/
-├── .github/workflows/            # CI/CD
-│   └── build-iso.yml
-└── README.md
+├── bin/                          # Pre-compiled binaries
+│   ├── z-gate-agent-x86_64
+│   └── z-gate-agent-arm64
+├── buildroot/                    # Build configurations
+│   ├── scripts/                  # Config generation scripts
+│   └── setup*.sh                 # Setup scripts
+├── .github/workflows/            # CI/CD automation
+├── Dockerfile.*                  # Build containers
+├── Makefile                      # Build orchestration
+├── test-build.sh                 # Local testing
+├── validate-iso.sh               # ISO validation
+├── PROJECT.md                    # Gaming optimization details
+└── GAMING-OPTIMIZATIONS.md       # Network stack tuning
 ```
 
-## 🔄 Update Workflow (For Private Repo Maintainers)
+## ⚙️ Características
 
-```bash
-# In private repo (paseo-vpn-gaming)
-make build-agent          # Compile agent
-make update-zgate-os      # Copy binaries to zgate-os/
-cd ../zgate-os
-git add bin/
-git commit -m "chore: Update agent binaries"
-git push                  # Triggers ISO build
-```
+### Optimizaciones de Red
+- **Busy Polling**: Procesamiento rápido de paquetes
+- **RPS/RFS**: Distribución multi-core
+- **CPU Pinning**: Interrupts dedicados
+- **SquashFS**: Compresión de rootfs
 
-## 📊 Build Times
+### Build System
+- **ccache**: Builds incrementales rápidos
+- **Parallel builds**: x86_64 + ARM64 simultáneos
+- **Docker**: Ambiente reproducible
 
-| Architecture | First Build | Incremental |
-|--------------|-------------|-------------|
-| x86_64       | ~30-40 min  | ~10-15 min  |
-| ARM64        | ~40-60 min  | ~15-20 min  |
+## 🔐 Seguridad
 
-## 🔐 Security
-
-- Agent binaries are **compiled** (not source code)
-- Build secrets injected via GitHub Secrets
-- ISOs are immutable (reproducible builds)
+- Minimal attack surface (sin servicios innecesarios)
+- Kernel hardening habilitado
+- SHA256 checksums automáticos
+- Builds reproducibles
 
 ## 📜 License
 
-Buildroot configurations: GPL-2.0  
-Agent binaries: Proprietary (Z-Gate)
-
-## 🔗 Links
-
-- Private Repo: (Access restricted)
-- Issues: Report in private repo
-- Releases: [GitHub Releases](../../releases)
-
----
-
-**Note:** This is the PUBLIC build system. The actual VPN logic is in the private repository.
+GPL-2.0 (Buildroot)

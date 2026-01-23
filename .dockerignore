@@ -1,0 +1,92 @@
+# ==============================================================================
+# Docker Ignore - Excluir archivos innecesarios del contexto de build
+# ==============================================================================
+
+# IMPORTANTE: Este archivo controla qué se copia al contexto de Docker
+# Solo excluir outputs, NO las configuraciones fuente
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Outputs de build (se generan dentro del contenedor)
+buildroot/output
+buildroot/output_*
+buildroot/isos
+buildroot/dl
+buildroot/.config
+buildroot/.auto.deps
+
+# Archivos temporales
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+build-*.log
+
+# Documentación (no necesaria en la imagen)
+TESTING.md
+COMPARISON.md
+WORKFLOW.md
+QUICK-START*.md
+SETUP*.md
+BUILD-STATUS.md
+SUMMARY.md
+docs/
+
+# GitHub workflows (no necesarios en imagen)
+.github/
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
+# Secrets locales
+.secrets
+*.pem
+*.key
+
+# Cache de Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Node modules (si los hubiera)
+node_modules/
+
+# Testing anterior (no usado en build optimizado)
+Dockerfile.test
+docker-test-entrypoint.sh
+test-build.sh
+monitor-build.sh
+
+# MANTENER (NO ignorar):
+# - buildroot/scripts/     → Necesario para generar configs
+# - buildroot/setup*.sh    → Necesario para builds
+# - bin/                   → Binarios del agent
+
+# Binarios compilados (se copian cuando sea necesario)
+# Nota: Los binarios en bin/ SÍ se necesitan, así que no los ignoramos
+
+# Archivos de macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Archivos de Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Archivos grandes que no se necesitan
+*.iso
+*.img
+*.ext4
+*.qcow2

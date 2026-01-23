@@ -3,7 +3,7 @@
 #  🛡️ Z-GATE CORE ORCHESTRATOR v34.0 (MODULAR) - Vultr x86_64
 # ==============================================================================
 
-set -e
+set -euo pipefail
 
 # ============================================================================
 # PATH SANITIZATION (Windows/macOS compatibility)

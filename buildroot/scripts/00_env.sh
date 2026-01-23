@@ -1,6 +1,8 @@
 #!/bin/bash
 # scripts/00_env.sh
 
+set -euo pipefail
+
 # --- RUTAS ---
 export ISO_PATH="output/images/rootfs.iso9660"
 export KERNEL_BUILD_DIR="output/build/linux-6.1.100"

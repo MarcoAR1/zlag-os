@@ -1,0 +1,57 @@
+# ==============================================================================
+# 🚀 Z-Gate ISO Builder (Optimizado con imagen base)
+# ==============================================================================
+# Esta imagen usa la base pre-construida para builds rápidos.
+#
+# Uso:
+#   docker build -f Dockerfile.build -t zgate-builder:latest .
+#   docker run --rm -v $(pwd):/workspace zgate-builder:latest x86_64
+# ==============================================================================
+
+# Usar la imagen base (local o desde registry)
+ARG BASE_IMAGE=zgate-buildroot-base:latest
+FROM ${BASE_IMAGE}
+
+USER root
+
+# ==============================================================================
+# Copiar archivos del proyecto
+# ==============================================================================
+WORKDIR /workspace
+
+# Copiar scripts de configuración (estos GENERAN los archivos)
+COPY buildroot/scripts/ /buildroot/scripts/
+
+# Copiar scripts de setup
+COPY buildroot/setup.sh /buildroot/
+COPY buildroot/setup_arm.sh /buildroot/
+
+# Copiar binarios del agent al workspace temporal
+COPY bin/ /workspace/bin/
+
+# Script de build optimizado
+COPY docker-build-entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh && \
+    chmod +x /buildroot/setup.sh && \
+    chmod +x /buildroot/setup_arm.sh
+
+# Dar permisos
+RUN chown -R builder:builder /workspace && \
+    chown -R builder:builder /buildroot
+
+# Pre-generar configuraciones ejecutando los scripts de configuración
+USER builder
+WORKDIR /buildroot
+
+# Ejecutar script de configuración para generar todos los archivos necesarios
+RUN bash -c "source scripts/00_env.sh && source scripts/02_config.sh && configure_system"
+RUN bash -c "source scripts/00_env.sh && source scripts/02_config_arm.sh && configure_system_arm"
+
+# ==============================================================================
+# Entrypoint
+# ==============================================================================
+USER builder
+WORKDIR /buildroot
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["both"]
