@@ -67,10 +67,12 @@ jobs:
       - name: Create secrets file
         run: |
           cd buildroot
-          cat > .secrets <<EOF
+          cat > .secrets <<'EOF'
           export ZGATE_SECRET="${{ secrets.ZGATE_SECRET }}"
           export MAX_MINUTES="120"
           EOF
+          # Limpiar espacios al inicio de cada línea
+          sed -i 's/^[[:space:]]*//' .secrets
 
       - name: Build Buildroot ISO (x86_64)
         run: |
@@ -154,10 +156,12 @@ jobs:
       - name: Create secrets file
         run: |
           cd buildroot
-          cat > .secrets <<EOF
+          cat > .secrets <<'EOF'
           export ZGATE_SECRET="${{ secrets.ZGATE_SECRET }}"
           export MAX_MINUTES="120"
           EOF
+          # Limpiar espacios al inicio de cada línea
+          sed -i 's/^[[:space:]]*//' .secrets
 
       - name: Build Buildroot Image (ARM64)
         run: |
