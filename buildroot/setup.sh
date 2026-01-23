@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+# Configurar TERM para entornos no-interactivos (GitHub Actions)
+export TERM=${TERM:-linux}
+
 # ============================================================================
 # PATH SANITIZATION (Windows/macOS compatibility)
 # ============================================================================
