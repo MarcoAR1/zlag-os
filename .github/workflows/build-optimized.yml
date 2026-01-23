@@ -14,7 +14,6 @@ on:
   workflow_dispatch:
 
 env:
-  BASE_IMAGE: ghcr.io/${{ github.repository_owner }}/zgate-buildroot-base:latest
   REGISTRY: ghcr.io
 
 jobs:
@@ -28,15 +27,22 @@ jobs:
       packages: write
     outputs:
       base-exists: ${{ steps.check.outputs.exists }}
+      base-image: ${{ steps.repo.outputs.base_image }}
     
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       
+      - name: Set lowercase repository owner
+        id: repo
+        run: |
+          echo "owner_lower=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "base_image=ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')/zgate-buildroot-base:latest" >> $GITHUB_OUTPUT
+      
       - name: Check if base image exists
         id: check
         run: |
-          if docker pull ${{ env.BASE_IMAGE }} 2>/dev/null; then
+          if docker pull ${{ steps.repo.outputs.base_image }} 2>/dev/null; then
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
@@ -53,14 +59,14 @@ jobs:
       - name: Build and push base image
         if: steps.check.outputs.exists == 'false'
         run: |
-          docker build -f Dockerfile.base -t ${{ env.BASE_IMAGE }} .
-          docker push ${{ env.BASE_IMAGE }}
+          docker build -f Dockerfile.base -t ${{ steps.repo.outputs.base_image }} .
+          docker push ${{ steps.repo.outputs.base_image }}
       
       - name: Scan base image for vulnerabilities
         if: steps.check.outputs.exists == 'false'
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.BASE_IMAGE }}
+          image-ref: ${{ steps.repo.outputs.base_image }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -100,7 +106,7 @@ jobs:
           ZGATE_SECRET: ${{ secrets.ZGATE_SECRET }}
         run: |
           docker build -f Dockerfile.build \
-            --build-arg BASE_IMAGE=${{ env.BASE_IMAGE }} \
+            --build-arg BASE_IMAGE=${{ needs.build-base-image.outputs.base-image }} \
             -t zgate-builder:x86_64 .
           
           docker run --rm \
@@ -144,7 +150,7 @@ jobs:
           ZGATE_SECRET: ${{ secrets.ZGATE_SECRET }}
         run: |
           docker build -f Dockerfile.build \
-            --build-arg BASE_IMAGE=${{ env.BASE_IMAGE }} \
+            --build-arg BASE_IMAGE=${{ needs.build-base-image.outputs.base-image }} \
             -t zgate-builder:arm64 .
           
           docker run --rm \

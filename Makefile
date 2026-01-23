@@ -17,7 +17,7 @@
 DOCKER_IMAGE := zgate-builder:test
 BASE_IMAGE := zgate-buildroot-base:latest
 BUILD_IMAGE := zgate-builder:latest
-GHCR_BASE := ghcr.io/$(shell git config --get remote.origin.url | sed 's/.*github.com[:/]//;s/.git$$//' 2>/dev/null || echo "owner/repo")/zgate-buildroot-base:latest
+GHCR_BASE := ghcr.io/$(shell git config --get remote.origin.url | sed 's/.*github.com[:/]//;s/.git$$//' | tr '[:upper:]' '[:lower:]' 2>/dev/null || echo "owner/repo")/zgate-buildroot-base:latest
 
 # Colores para output
 RED := \033[0;31m
