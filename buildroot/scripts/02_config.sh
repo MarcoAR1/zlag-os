@@ -174,8 +174,8 @@ chmod 1777 /tmp
 echo "--- 🚀 Z-GATE OS STARTED ---"
 INITEOF
 
-# Continuar con el script /init
-cat >> ${TARGET_DIR}/init << 'INITEOF2'
+# Continuar con el script /init (sin expansión de variables)
+cat >> ${TARGET_DIR}/init <<'INITEOF2'
 
 # 🎮 Gaming Network Optimization (ultra-low latency)
 echo "⚡ Aplicando optimizaciones de red para gaming..."
