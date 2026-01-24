@@ -93,23 +93,11 @@ cmd_test() {
     echo -e "${BLUE}🧪 Iniciando test de build: $target${NC}"
     echo ""
     
-    # Preparar variables de entorno (si existen)
-    DOCKER_ENV=""
-    if [ -n "$ZGATE_SECRET" ]; then
-        DOCKER_ENV="$DOCKER_ENV -e ZGATE_SECRET=$ZGATE_SECRET"
-        echo -e "${GREEN}✓ Usando ZGATE_SECRET del ambiente${NC}"
-    fi
-    if [ -n "$VULTR_API_KEY" ]; then
-        DOCKER_ENV="$DOCKER_ENV -e VULTR_API_KEY=$VULTR_API_KEY"
-        echo -e "${GREEN}✓ Usando VULTR_API_KEY del ambiente${NC}"
-    fi
-    
     echo ""
     
     # Ejecutar Docker con volumen montado
     docker run --rm \
         -v "$SCRIPT_DIR:/workspace" \
-        $DOCKER_ENV \
         "$DOCKER_IMAGE" "$target"
 }
 
@@ -191,10 +179,6 @@ cmd_help() {
     echo "  ./test-build.sh x86_64         # Test rápido x86_64"
     echo "  ./test-build.sh both           # Test completo"
     echo "  ./test-build.sh verify         # Verificar resultados"
-    echo ""
-    echo "Variables de entorno opcionales:"
-    echo "  export ZGATE_SECRET=xxx        # Secret para el agent"
-    echo "  export VULTR_API_KEY=xxx       # API key de Vultr"
     echo ""
 }
 

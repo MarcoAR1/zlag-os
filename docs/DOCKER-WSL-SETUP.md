@@ -111,15 +111,20 @@ export DOCKER_BUILDKIT=1
 # Test x86_64 (1-2 horas primera vez, usa TODOS tus cores)
 make local-test-x86
 
+# IMPORTANTE: No instales nada manualmente durante el build
+# La imagen Docker ya tiene todas las dependencias (libelf-dev, etc.)
+# Si falla por dependencias faltantes, rebuildeala imagen base:
+# docker build -f Dockerfile.base -t zgate-buildroot-base:local .
+
 # O si prefieres más control:
 docker build -f Dockerfile.base -t zgate-buildroot-base:local .
 docker build -f Dockerfile.build \
   --build-arg BASE_IMAGE=zgate-buildroot-base:local \
   -t zgate-builder:x86_64-local .
+v $(pwd)/output:/buildroot/isos \
+  zgate-builder:x86_64-local x86_64
 
-mkdir -p output
-docker run --rm \
-  --cpus="$(nproc)" \
+# NOTA: La imagen es auto-suficiente, no requiere instalaciones adicionales  --cpus="$(nproc)" \
   -e TERM=linux \
   -e ZGATE_SECRET="test-secret" \
   -v $(pwd)/output:/buildroot/isos \
@@ -149,16 +154,20 @@ docker stats
 ### Puntos de control
 
 ```bash
-# Durante el build, verificar que no hay error de objtool
-# Buscar estos mensajes:
+# Durante el build, verificar progreso:
 
 # ✅ BUENO:
 # [✓] x86_64 output ready
 # [✓] Buildroot compilation successful
+# Kernel: arch/x86/boot/bzImage is ready
 
-# ❌ MALO:
-# make[2]: *** [Makefile:73: objtool] Error 2
-# Error en compilación del kernel
+# ❌ MALO - Imagen base incompleta (rebuildeala):
+# fatal error: gelf.h: No such file or directory
+# → docker build -f Dockerfile.base -t zgate-buildroot-base:local .
+
+# ❌ MALO - Error de configuración:
+# CONFIG_OBJTOOL is not set but still compiling
+# → Verifica que linux.fragment se aplicó correctamente
 ```
 
 ---

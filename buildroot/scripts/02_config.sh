@@ -115,6 +115,8 @@ BR2_LINUX_KERNEL_CUSTOM_VERSION=y
 BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE="6.1.100"
 BR2_LINUX_KERNEL_USE_ARCH_DEFAULT_CONFIG=y
 BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="board/zgate/linux.fragment"
+BR2_LINUX_KERNEL_NEEDS_HOST_LIBELF=n
+BR2_LINUX_KERNEL_NEEDS_HOST_OPENSSL=n
 BR2_PACKAGE_LIBNFTNL=y
 BR2_PACKAGE_NFTABLES=y
 BR2_PACKAGE_WIREGUARD_TOOLS=y
@@ -145,23 +147,18 @@ BR2_TARGET_GRUB2_BUILTIN_CONFIG_PC="board/zgate/grub-pre.cfg"
 BR2_TARGET_GRUB2_BUILTIN_MODULES_PC="boot linux ext2 fat part_msdos part_gpt normal biosdisk iso9660 search search_fs_file echo test"
 EOF
 
-    # 3. SCRIPTS DE SOPORTE (Inyección de Secretos)
+    # 3. SCRIPTS DE SOPORTE
     cat <<'EOF' > board/zgate/post_build.sh
 #!/bin/bash
 set -e
 TARGET_DIR=$1
-
-# Cargar secretos si existen
-if [ -f "../../.secrets" ]; then
-    source "../../.secrets"
-fi
 
 rm -rf ${TARGET_DIR}/var/run
 ln -snf ../run ${TARGET_DIR}/var/run
 mkdir -p ${TARGET_DIR}/boot/grub ${TARGET_DIR}/usr/bin ${TARGET_DIR}/sbin
 cp board/zgate/menu.cfg ${TARGET_DIR}/boot/grub/grub.cfg
 
-# Generar /init con secretos inyectados
+# Generar /init
 cat > ${TARGET_DIR}/init << 'INITEOF'
 #!/bin/sh
 # Agregamos el PATH aquí para que todo lo que venga después funcione
@@ -176,9 +173,6 @@ chmod 1777 /tmp
 
 echo "--- 🚀 Z-GATE OS STARTED ---"
 INITEOF
-
-# Inyectar variables de entorno
-echo "export ZGATE_SECRET=\"${ZGATE_SECRET:-zgate-dev-default}\"" >> ${TARGET_DIR}/init
 
 # Continuar con el script /init
 cat >> ${TARGET_DIR}/init << 'INITEOF2'

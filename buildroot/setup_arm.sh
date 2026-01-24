@@ -47,9 +47,6 @@ source scripts/01_deps.sh
 source scripts/02_config_arm.sh
 source scripts/03_agent_arm.sh
 
-# Cargar Secretos
-load_secrets
-
 # Función de Cabecera
 header() {
     clear
@@ -59,7 +56,6 @@ header() {
     echo -e "Modo: ${YELLOW}$1${NC} | Jobs: ${YELLOW}$JOBS${NC}"
     echo -e "Architecture: ${YELLOW}ARM64 (aarch64)${NC}"
     echo -e "Target: ${YELLOW}Oracle Cloud Ampere A1${NC}"
-    echo -e "Secret Injection: ${GREEN}ACTIVE${NC}"
     echo -e "----------------------------------------------------"
 }
 

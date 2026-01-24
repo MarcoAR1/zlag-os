@@ -149,12 +149,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Build x86_64 ISO (usando imagen pre-compilada)
-        env:
-          ZGATE_SECRET: ${{ secrets.ZGATE_SECRET }}
         run: |
           docker run --rm \
             -e TERM=linux \
-            -e ZGATE_SECRET="${ZGATE_SECRET}" \
             -v $(pwd)/bin:/workspace/bin:ro \
             -v $(pwd)/output:/buildroot/isos \
             ${{ needs.build-compiled-image.outputs.compiled-image }} x86_64
@@ -191,12 +188,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Build ARM64 Image (usando imagen pre-compilada)
-        env:
-          ZGATE_SECRET: ${{ secrets.ZGATE_SECRET }}
         run: |
           docker run --rm \
             -e TERM=linux \
-            -e ZGATE_SECRET="${ZGATE_SECRET}" \
             -v $(pwd)/bin:/workspace/bin:ro \
             -v $(pwd)/output:/buildroot/isos \
             ${{ needs.build-compiled-image.outputs.compiled-image }} arm64

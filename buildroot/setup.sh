@@ -46,9 +46,6 @@ source scripts/01_deps.sh
 source scripts/02_config.sh
 source scripts/03_agent.sh
 
-# Cargar Secretos
-load_secrets
-
 # Función de Cabecera
 header() {
     clear
@@ -56,7 +53,6 @@ header() {
     echo -e "${CYAN}       🛡️  Z-GATE CORE | ORCHESTRATOR v34.0       ${NC}"
     echo -e "${CYAN}====================================================${NC}"
     echo -e "Modo: ${YELLOW}$1${NC} | Jobs: ${YELLOW}$JOBS${NC}"
-    echo -e "Secret Injection: ${GREEN}ACTIVE${NC}"
     echo -e "Audio Fix: ${GREEN}ACTIVE${NC}"
     echo -e "----------------------------------------------------"
 }

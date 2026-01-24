@@ -278,7 +278,6 @@ local-test-x86:
 	mkdir -p output
 	docker run --rm \
 		-e TERM=linux \
-		-e ZGATE_SECRET="test-secret-local" \
 		-v $(PWD)/output:/buildroot/isos \
 		zgate-builder:x86_64-local x86_64
 	@echo ""
@@ -302,7 +301,6 @@ local-test-arm:
 	mkdir -p output
 	docker run --rm \
 		-e TERM=linux \
-		-e ZGATE_SECRET="test-secret-local" \
 		-v $(PWD)/output:/buildroot/isos \
 		zgate-builder:arm64-local arm64
 	@echo ""
