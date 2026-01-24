@@ -199,22 +199,22 @@ ethtool -K eth0 gso off 2>/dev/null || true
 echo "⚡ Configurando CPU pinning para latencia consistente..."
 
 # Pin interrupciones de red a CPU0-1
-for irq in \$(grep -E 'eth0|virtio0' /proc/interrupts | cut -d: -f1 | tr -d ' '); do
-    echo "0-1" > /proc/irq/\$irq/smp_affinity_list 2>/dev/null || true
+for irq in $(grep -E 'eth0|virtio0' /proc/interrupts | cut -d: -f1 | tr -d ' '); do
+    echo "0-1" > /proc/irq/$irq/smp_affinity_list 2>/dev/null || true
 done
 
 # RPS: Pin software IRQs a CPU0-1 (bitmask: 0x3 = CPU0,1)
 for rps in /sys/class/net/eth*/queues/rx-*/rps_cpus; do
-    [ -f "\$rps" ] && echo "3" > "\$rps" 2>/dev/null || true
+    [ -f "$rps" ] && echo "3" > "$rps" 2>/dev/null || true
 done
 
 echo "✓ Optimizaciones OS aplicadas (CPU pinning, busy polling, RPS/RFS)"
 
 echo "🔍 Levantando interfaces..."
 for iface in /sys/class/net/*; do
-    ifname=\$(basename "\$iface")
-    if [ "\$ifname" != "lo" ] && [ "\$ifname" != "sit0" ]; then
-        /sbin/ip link set \$ifname up
+    ifname=$(basename "$iface")
+    if [ "$ifname" != "lo" ] && [ "$ifname" != "sit0" ]; then
+        /sbin/ip link set $ifname up
     fi
 done
 
