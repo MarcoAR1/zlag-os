@@ -12,6 +12,7 @@
 
 .PHONY: help setup test test-x86 test-arm verify clean shell docker-build
 .PHONY: build-base build-x86 build-arm build-both push-base pull-base
+.PHONY: local-test-x86 local-test-arm
 
 # Variables
 DOCKER_IMAGE := zgate-builder:test
@@ -47,6 +48,10 @@ help:
 	@echo "  make test           Test completo (x86_64 + ARM64)"
 	@echo "  make test-x86       Test solo x86_64"
 	@echo "  make test-arm       Test solo ARM64"
+	@echo ""
+	@echo "$(CYAN)⚡ Local Quick Test (Verificar fix de objtool):$(NC)"
+	@echo "  make local-test-x86   Test x86_64 LOCAL (1-2h primera vez)"
+	@echo "  make local-test-arm   Test ARM64 LOCAL (1-2h primera vez)"
 	@echo ""
 	@echo "$(GREEN)🚀 GitHub Container Registry:$(NC)"
 	@echo "  make push-base      Subir imagen base a GHCR"
@@ -252,6 +257,58 @@ pull-base:
 	docker pull $(GHCR_BASE)
 	docker tag $(GHCR_BASE) $(BASE_IMAGE)
 	@echo "$(GREEN)✅ Imagen descargada: $(BASE_IMAGE)$(NC)"
+
+# ==============================================================================
+# Local Quick Test (Verificar fix antes de GitHub Actions)
+# ==============================================================================
+local-test-x86:
+	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════╗$(NC)"
+	@echo "$(CYAN)║ 🧪 LOCAL TEST x86_64 (Verificar fix de objtool)         ║$(NC)"
+	@echo "$(CYAN)╚═══════════════════════════════════════════════════════════╝$(NC)"
+	@echo ""
+	@echo "$(YELLOW)[1/3] Building base image...$(NC)"
+	docker build -f Dockerfile.base -t zgate-buildroot-base:local .
+	@echo ""
+	@echo "$(YELLOW)[2/3] Building x86_64 (esto tomará 1-2 horas primera vez)...$(NC)"
+	docker build -f Dockerfile.build \
+		--build-arg BASE_IMAGE=zgate-buildroot-base:local \
+		-t zgate-builder:x86_64-local .
+	@echo ""
+	@echo "$(YELLOW)[3/3] Running build...$(NC)"
+	mkdir -p output
+	docker run --rm \
+		-e TERM=linux \
+		-e ZGATE_SECRET="test-secret-local" \
+		-v $(PWD)/output:/buildroot/isos \
+		zgate-builder:x86_64-local x86_64
+	@echo ""
+	@echo "$(GREEN)✅ SUCCESS! ISO generado en: output/vultr-x86_64/$(NC)"
+	@ls -lh output/vultr-x86_64/zgate-vultr-x86_64.iso
+
+local-test-arm:
+	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════╗$(NC)"
+	@echo "$(CYAN)║ 🧪 LOCAL TEST ARM64 (Verificar fix de objtool)          ║$(NC)"
+	@echo "$(CYAN)╚═══════════════════════════════════════════════════════════╝$(NC)"
+	@echo ""
+	@echo "$(YELLOW)[1/3] Building base image...$(NC)"
+	docker build -f Dockerfile.base -t zgate-buildroot-base:local .
+	@echo ""
+	@echo "$(YELLOW)[2/3] Building ARM64 (esto tomará 1-2 horas primera vez)...$(NC)"
+	docker build -f Dockerfile.build \
+		--build-arg BASE_IMAGE=zgate-buildroot-base:local \
+		-t zgate-builder:arm64-local .
+	@echo ""
+	@echo "$(YELLOW)[3/3] Running build...$(NC)"
+	mkdir -p output
+	docker run --rm \
+		-e TERM=linux \
+		-e ZGATE_SECRET="test-secret-local" \
+		-v $(PWD)/output:/buildroot/isos \
+		zgate-builder:arm64-local arm64
+	@echo ""
+	@echo "$(GREEN)✅ SUCCESS! Image generado en: output/oracle-arm64/$(NC)"
+	@ls -lh output/oracle-arm64/zgate-oracle-arm64.ext4
+
 
 	@echo "  git push origin main"
 	@echo ""

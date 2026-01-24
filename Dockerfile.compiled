@@ -1,0 +1,56 @@
+# ==============================================================================
+# Dockerfile.compiled - Buildroot Output Pre-compilado
+# ==============================================================================
+# Esta imagen contiene el output de Buildroot YA COMPILADO (kernel + packages)
+# Solo necesita copiar el agente y regenerar ISO (~5 minutos vs 2 horas)
+# ==============================================================================
+
+ARG BASE_IMAGE=ghcr.io/marcoar1/zgate-buildroot-base:latest
+FROM ${BASE_IMAGE}
+
+WORKDIR /buildroot
+
+# Copiar archivos de configuración
+COPY buildroot/board/zgate/ board/zgate/
+COPY buildroot/configs/ configs/
+COPY buildroot/scripts/ scripts/
+COPY buildroot/*.sh ./
+
+# ==============================================================================
+# PRE-COMPILAR BUILDROOT OUTPUT (x86_64 + ARM64)
+# ==============================================================================
+
+# x86_64 Build
+RUN set -e && \
+    source scripts/00_env.sh && \
+    source scripts/01_deps.sh && \
+    source scripts/02_config.sh && \
+    configure_system && \
+    echo "[🔨] Pre-compiling x86_64 Buildroot output..." && \
+    make zgate_defconfig && \
+    make -j$(nproc) && \
+    echo "[✓] x86_64 output ready"
+
+# ARM64 Build  
+RUN set -e && \
+    source scripts/00_env.sh && \
+    source scripts/01_deps.sh && \
+    source scripts/02_config_arm.sh && \
+    configure_system_arm && \
+    echo "[🔨] Pre-compiling ARM64 Buildroot output..." && \
+    make O=output_arm64 zgate_arm64_defconfig && \
+    make O=output_arm64 -j$(nproc) && \
+    echo "[✓] ARM64 output ready"
+
+# Limpiar archivos temporales para reducir tamaño de imagen
+RUN rm -rf output/build/*/.*stamp_* && \
+    rm -rf output_arm64/build/*/.*stamp_*
+
+# ==============================================================================
+# ENTRYPOINT: Solo copiar agente y regenerar ISO
+# ==============================================================================
+
+COPY docker-build-entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

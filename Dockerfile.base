@@ -20,6 +20,13 @@ ENV TERM=linux
 
 # Variables de Buildroot
 ENV BR2_DL_DIR=/buildroot/dl
+ENV BR2_JLEVEL=0
+ENV FORCE_UNSAFE_CONFIGURE=1
+
+# Optimization: Enable ccache and parallel downloads
+ENV BR2_CCACHE=y
+ENV BR2_CCACHE_DIR=/buildroot/dl/ccache
+ENV MAKEFLAGS="-j$(($(nproc) + 2))"
 
 # ==============================================================================
 # Instalar dependencias de Buildroot
@@ -37,6 +44,10 @@ RUN apt-get update && apt-get install -y \
     file \
     python3 \
     python3-pip \
+    # Compiler cache para builds incrementales
+    ccache \
+    # Parallel downloads
+    aria2 \
     # Cross-compilation para ARM64
     gcc-aarch64-linux-gnu \
     g++-aarch64-linux-gnu \

@@ -84,6 +84,11 @@ EOF
 CONFIG_ARM64=y
 CONFIG_64BIT=y
 
+# --- BUILD FIX: Disable objtool (not needed for ARM64) ---
+# CONFIG_OBJTOOL is not set
+# CONFIG_UNWINDER_ORC is not set
+CONFIG_UNWINDER_FRAME_POINTER=y
+
 # Oracle Cloud Virtual Machine
 CONFIG_ARCH_VIRT=y
 CONFIG_VIRTIO=y

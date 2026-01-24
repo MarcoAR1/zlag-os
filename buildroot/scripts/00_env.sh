@@ -10,7 +10,10 @@ export TERM=${TERM:-linux}
 export ISO_PATH="output/images/rootfs.iso9660"
 export KERNEL_BUILD_DIR="output/build/linux-6.1.100"
 export AGENT_SRC_DIR="../zgate/agent"
-export JOBS=$(nproc)
+
+# --- BUILD OPTIMIZATION ---
+# JOBS: cores + 2 para I/O overlap (GitHub Actions: 4 cores → 6 jobs)
+export JOBS=$(( $(nproc) + 2 ))
 
 # --- COLORES ---
 export GREEN='\033[0;32m'

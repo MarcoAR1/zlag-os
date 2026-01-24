@@ -63,8 +63,8 @@ sync_config() {
             fi
         elif [[ "$ARCH" == "arm64" ]]; then
             if [[ -f "/workspace/bin/z-gate-agent-arm64" ]]; then
-                cp /workspace/bin/z-gate-agent-arm64 board/zgate/rootfs-overlay/usr/bin/z-gate-agent-arm64
-                chmod +x board/zgate/rootfs-overlay/usr/bin/z-gate-agent-arm64
+                cp /workspace/bin/z-gate-agent-arm64 board/zgate/rootfs-overlay/usr/bin/z-gate-agent
+                chmod +x board/zgate/rootfs-overlay/usr/bin/z-gate-agent
                 echo -e "${GREEN}✓ z-gate-agent (arm64) copiado${NC}"
             else
                 echo -e "${RED}❌ z-gate-agent-arm64 no encontrado${NC}"

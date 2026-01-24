@@ -78,10 +78,57 @@ jobs:
           sarif_file: 'trivy-results.sarif'
 
   # ==============================================================================
-  # Job 2: Build x86_64 ISO
+  # Job 2: Construir imagen pre-compilada (Buildroot output listo)
+  # ==============================================================================
+  build-compiled-image:
+    needs: build-base-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      compiled-exists: ${{ steps.check-compiled.outputs.exists }}
+      compiled-image: ${{ steps.repo.outputs.compiled_image }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Set image names
+        id: repo
+        run: |
+          echo "compiled_image=ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')/zgate-buildroot-compiled:latest" >> $GITHUB_OUTPUT
+      
+      - name: Check if compiled image exists
+        id: check-compiled
+        run: |
+          if docker pull ${{ steps.repo.outputs.compiled_image }} 2>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Login to GitHub Container Registry
+        if: steps.check-compiled.outputs.exists == 'false'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push compiled image (2 horas, solo primera vez)
+        if: steps.check-compiled.outputs.exists == 'false'
+        run: |
+          docker build -f Dockerfile.compiled \
+            --build-arg BASE_IMAGE=${{ needs.build-base-image.outputs.base-image }} \
+            -t ${{ steps.repo.outputs.compiled_image }} .
+          docker push ${{ steps.repo.outputs.compiled_image }}
+
+  # ==============================================================================
+  # Job 3: Build x86_64 ISO (5 min con imagen pre-compilada)
   # ==============================================================================
   build-x86_64:
-    needs: build-base-image
+    needs: build-compiled-image
     runs-on: ubuntu-latest
     
     steps:
@@ -94,20 +141,6 @@ jobs:
           chmod +x validate.sh
           ./validate.sh
       
-      # ============================================================
-      # CACHE AGRESIVO: Buildroot output (kernel + 200+ packages)
-      # Invalida solo si cambian configs, NO por cambios en agente
-      # ============================================================
-      - name: Cache Buildroot x86_64 output
-        uses: actions/cache@v5
-        with:
-          path: |
-            buildroot/output/
-            buildroot/dl/
-          key: buildroot-x86_64-${{ hashFiles('buildroot/scripts/02_config.sh', 'buildroot/board/zgate/*.fragment', 'buildroot/configs/zgate_defconfig') }}
-          restore-keys: |
-            buildroot-x86_64-
-      
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -115,19 +148,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Build x86_64 ISO
+      - name: Build x86_64 ISO (usando imagen pre-compilada)
         env:
           ZGATE_SECRET: ${{ secrets.ZGATE_SECRET }}
         run: |
-          docker build -f Dockerfile.build \
-            --build-arg BASE_IMAGE=${{ needs.build-base-image.outputs.base-image }} \
-            -t zgate-builder:x86_64 .
-          
           docker run --rm \
             -e TERM=linux \
             -e ZGATE_SECRET="${ZGATE_SECRET}" \
+            -v $(pwd)/bin:/workspace/bin:ro \
             -v $(pwd)/output:/buildroot/isos \
-            zgate-builder:x86_64 x86_64
+            ${{ needs.build-compiled-image.outputs.compiled-image }} x86_64
       
       - name: Upload x86_64 ISO
         uses: actions/upload-artifact@v4
@@ -137,10 +167,10 @@ jobs:
           retention-days: 30
 
   # ==============================================================================
-  # Job 3: Build ARM64 Image (PARALELO - ejecuta simultáneamente con x86_64)
+  # Job 4: Build ARM64 Image (PARALELO - ejecuta simultáneamente con x86_64)
   # ==============================================================================
   build-arm64:
-    needs: build-base-image  # Solo depende de base, NO de x86_64 → builds paralelos (50% faster CI)
+    needs: build-compiled-image  # Usa imagen pre-compilada
     runs-on: ubuntu-latest
     
     steps:
@@ -153,20 +183,6 @@ jobs:
           chmod +x validate.sh
           ./validate.sh
       
-      # ============================================================
-      # CACHE AGRESIVO: Buildroot output (kernel + 200+ packages)
-      # Invalida solo si cambian configs, NO por cambios en agente
-      # ============================================================
-      - name: Cache Buildroot ARM64 output
-        uses: actions/cache@v5
-        with:
-          path: |
-            buildroot/output_arm64/
-            buildroot/dl/
-          key: buildroot-arm64-${{ hashFiles('buildroot/scripts/02_config_arm.sh', 'buildroot/board/zgate/*.fragment', 'buildroot/configs/zgate_arm64_defconfig') }}
-          restore-keys: |
-            buildroot-arm64-
-      
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -174,19 +190,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Build ARM64 Image
+      - name: Build ARM64 Image (usando imagen pre-compilada)
         env:
           ZGATE_SECRET: ${{ secrets.ZGATE_SECRET }}
         run: |
-          docker build -f Dockerfile.build \
-            --build-arg BASE_IMAGE=${{ needs.build-base-image.outputs.base-image }} \
-            -t zgate-builder:arm64 .
-          
           docker run --rm \
             -e TERM=linux \
             -e ZGATE_SECRET="${ZGATE_SECRET}" \
+            -v $(pwd)/bin:/workspace/bin:ro \
             -v $(pwd)/output:/buildroot/isos \
-            zgate-builder:arm64 arm64
+            ${{ needs.build-compiled-image.outputs.compiled-image }} arm64
       
       - name: Upload ARM64 Image
         uses: actions/upload-artifact@v4

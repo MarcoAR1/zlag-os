@@ -9,6 +9,11 @@ configure_system() {
 
     # 1. FRAGMENTO DEL KERNEL (Networking + Audio Fix + NFT Fix)
     cat <<EOF > board/zgate/linux.fragment
+# --- BUILD FIX: Disable objtool (causes compilation errors) ---
+# CONFIG_OBJTOOL is not set
+# CONFIG_UNWINDER_ORC is not set
+CONFIG_UNWINDER_FRAME_POINTER=y
+
 # --- VIRTUALIZATION ---
 CONFIG_HYPERVISOR_GUEST=y
 CONFIG_PARAVIRT=y
