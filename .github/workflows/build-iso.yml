@@ -5,12 +5,8 @@ on:
     branches: [ main ]
     paths:
       - 'buildroot/**'
-      - 'bin/**'
       - '.github/workflows/build-iso.yml'
-  
   workflow_dispatch:
-  
-  # Trigger desde repo privado via webhook
   repository_dispatch:
     types: [build-isos]
 
@@ -18,61 +14,83 @@ env:
   ZGATE_SECRET: ${{ secrets.ZGATE_SECRET }}
 
 jobs:
+  # --------------------------------------------------------------------------
+  # 1. Compilar Agente (Go)
+  # --------------------------------------------------------------------------
+  build-agent:
+    name: Build Go Agent
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4  # <--- CORREGIDO v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5  # <--- CORREGIDO v5
+        with:
+          go-version: '1.22'
+          
+      - name: Build x86_64 Agent
+        run: |
+          mkdir -p bin
+          GOOS=linux GOARCH=amd64 go build -o bin/z-gate-agent-x86_64 ./cmd/agent 
+          
+      - name: Build ARM64 Agent
+        run: |
+          GOOS=linux GOARCH=arm64 go build -o bin/z-gate-agent-arm64 ./cmd/agent
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4  # <--- CORREGIDO v4
+        with:
+          name: agent-binaries
+          path: bin/
+          retention-days: 1
+
+  # --------------------------------------------------------------------------
+  # 2. Build x86_64 ISO
+  # --------------------------------------------------------------------------
   build-x86_64:
     name: Build x86_64 ISO (Vultr)
+    needs: build-agent
     runs-on: ubuntu-22.04
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4  # <--- CORREGIDO v4
+
+      - name: Download Agent Binary
+        uses: actions/download-artifact@v4  # <--- CORREGIDO v4
+        with:
+          name: agent-binaries
+          path: bin
 
       - name: Install Buildroot dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            libncurses5-dev \
-            git \
-            bc \
-            wget \
-            cpio \
-            unzip \
-            rsync \
-            file \
-            python3
+          sudo apt-get install -y build-essential libncurses5-dev git bc wget cpio unzip rsync file python3
 
       - name: Cache Buildroot downloads
-        uses: actions/cache@v5
+        uses: actions/cache@v4  # <--- CORREGIDO v4
         with:
           path: buildroot/dl
           key: buildroot-dl-x86-${{ hashFiles('buildroot/configs/zgate_defconfig') }}
           restore-keys: |
             buildroot-dl-x86-
 
-      - name: Verify agent binary exists
+      - name: Inject Agent
         run: |
           if [ ! -f bin/z-gate-agent-x86_64 ]; then
-            echo "❌ Error: Agent binary not found in bin/"
-            echo "Run 'make update-agent' in private repo first"
+            echo "❌ Error: Agent binary missing"
             exit 1
           fi
           
-          # Copy to buildroot overlay
           mkdir -p buildroot/board/zgate/rootfs-overlay/usr/bin/
           cp bin/z-gate-agent-x86_64 buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent
           chmod +x buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent
-          
-          ls -lh buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent
 
       - name: Create secrets file
         run: |
           cd buildroot
-          cat > .secrets <<'EOF'
-          export ZGATE_SECRET="${{ secrets.ZGATE_SECRET }}"
-          export MAX_MINUTES="120"
-          EOF
-          # Limpiar espacios al inicio de cada línea
-          sed -i 's/^[[:space:]]*//' .secrets
+          echo "export ZGATE_SECRET='${{ secrets.ZGATE_SECRET }}'" > .secrets
+          echo "export MAX_MINUTES='120'" >> .secrets
 
       - name: Build Buildroot ISO (x86_64)
         run: |
@@ -89,11 +107,9 @@ jobs:
           
           SIZE=$(du -h zgate-vultr-x86_64.iso | cut -f1)
           echo "size=${SIZE}" >> $GITHUB_OUTPUT
-          
-          echo "✅ ISO x86_64: ${SIZE} - SHA256: ${SHA256:0:16}..."
 
       - name: Upload x86_64 ISO artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4  # <--- CORREGIDO v4
         with:
           name: zgate-vultr-x86_64-iso
           path: |
@@ -106,62 +122,53 @@ jobs:
       short_sha: ${{ steps.hash.outputs.short_sha }}
       size: ${{ steps.hash.outputs.size }}
 
+  # --------------------------------------------------------------------------
+  # 3. Build ARM64 Image
+  # --------------------------------------------------------------------------
   build-arm64:
     name: Build ARM64 Image (Oracle Cloud)
+    needs: build-agent
     runs-on: ubuntu-22.04
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4  # <--- CORREGIDO v4
 
-      - name: Install ARM64 cross-compilation tools
+      - name: Download Agent Binary
+        uses: actions/download-artifact@v4  # <--- CORREGIDO v4
+        with:
+          name: agent-binaries
+          path: bin
+
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            libncurses5-dev \
-            git \
-            bc \
-            wget \
-            cpio \
-            unzip \
-            rsync \
-            file \
-            python3 \
-            gcc-aarch64-linux-gnu
+          sudo apt-get install -y build-essential libncurses5-dev git bc wget cpio unzip rsync file python3
 
       - name: Cache Buildroot downloads (ARM64)
-        uses: actions/cache@v5
+        uses: actions/cache@v4  # <--- CORREGIDO v4
         with:
           path: buildroot/dl
           key: buildroot-dl-arm64-${{ hashFiles('buildroot/configs/zgate_arm64_defconfig') }}
           restore-keys: |
             buildroot-dl-arm64-
 
-      - name: Verify agent binary exists
+      - name: Inject Agent
         run: |
           if [ ! -f bin/z-gate-agent-arm64 ]; then
-            echo "❌ Error: Agent ARM64 binary not found in bin/"
-            echo "Run 'make update-agent' in private repo first"
+            echo "❌ Error: Agent binary missing"
             exit 1
           fi
           
-          # Copy to buildroot overlay
           mkdir -p buildroot/board/zgate/rootfs-overlay/usr/bin/
           cp bin/z-gate-agent-arm64 buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent-arm64
           chmod +x buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent-arm64
-          
-          ls -lh buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent-arm64
 
       - name: Create secrets file
         run: |
           cd buildroot
-          cat > .secrets <<'EOF'
-          export ZGATE_SECRET="${{ secrets.ZGATE_SECRET }}"
-          export MAX_MINUTES="120"
-          EOF
-          # Limpiar espacios al inicio de cada línea
-          sed -i 's/^[[:space:]]*//' .secrets
+          echo "export ZGATE_SECRET='${{ secrets.ZGATE_SECRET }}'" > .secrets
+          echo "export MAX_MINUTES='120'" >> .secrets
 
       - name: Build Buildroot Image (ARM64)
         run: |
@@ -175,14 +182,11 @@ jobs:
           SHA256=$(sha256sum zgate-oracle-arm64.ext4 | cut -d' ' -f1)
           echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
           echo "short_sha=${SHA256:0:8}" >> $GITHUB_OUTPUT
-          
           SIZE=$(du -h zgate-oracle-arm64.ext4 | cut -f1)
           echo "size=${SIZE}" >> $GITHUB_OUTPUT
-          
-          echo "✅ Image ARM64: ${SIZE} - SHA256: ${SHA256:0:16}..."
 
       - name: Upload ARM64 image artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4  # <--- CORREGIDO v4
         with:
           name: zgate-oracle-arm64-image
           path: |
@@ -195,6 +199,9 @@ jobs:
       short_sha: ${{ steps.hash.outputs.short_sha }}
       size: ${{ steps.hash.outputs.size }}
 
+  # --------------------------------------------------------------------------
+  # 4. Release
+  # --------------------------------------------------------------------------
   create-release:
     name: Create GitHub Release
     needs: [build-x86_64, build-arm64]
@@ -203,13 +210,13 @@ jobs:
     
     steps:
       - name: Download x86_64 artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4  # <--- CORREGIDO v4
         with:
           name: zgate-vultr-x86_64-iso
           path: ./x86_64
 
       - name: Download ARM64 artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4  # <--- CORREGIDO v4
         with:
           name: zgate-oracle-arm64-image
           path: ./arm64
@@ -219,67 +226,41 @@ jobs:
         run: |
           TAG="iso-$(date +%Y%m%d-%H%M)-${GITHUB_SHA:0:8}"
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "Release tag: ${TAG}"
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2  # <--- CORREGIDO v2 (la v1 ya es muy vieja)
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: "Z-Gate ISOs - $(date +%Y-%m-%d)"
           body: |
             # 🚀 Z-Gate Buildroot ISOs
-            
-            **Commit**: `${{ github.sha }}`  
-            **Date**: $(date -u +"%Y-%m-%d %H:%M UTC")
+            **Commit**: `${{ github.sha }}`
             
             ## 📦 Downloads
-            
-            ### x86_64 (Vultr VPS)
+            ### x86_64
             - **Size**: ${{ needs.build-x86_64.outputs.size }}
             - **SHA256**: `${{ needs.build-x86_64.outputs.sha256 }}`
-            
-            ### ARM64 (Oracle Cloud)
+            ### ARM64
             - **Size**: ${{ needs.build-arm64.outputs.size }}
             - **SHA256**: `${{ needs.build-arm64.outputs.sha256 }}`
-            
-            ## 🎯 Usage
-            
-            Brain downloads these ISOs automatically from GitHub Releases.
-            
-            ```bash
-            # In private repo
-            cd zgate
-            ./zgate -region sao
-            ```
-            
-            ## 🔐 Verification
-            
-            ```bash
-            sha256sum zgate-vultr-x86_64.iso
-            # ${{ needs.build-x86_64.outputs.sha256 }}
-            ```
           files: |
             ./x86_64/zgate-vultr-x86_64.iso
             ./x86_64/checksums.txt
             ./arm64/zgate-oracle-arm64.ext4
             ./arm64/checksums.txt
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   summary:
     name: Build Summary
-    needs: [build-x86_64, build-arm64, create-release]
+    needs: [build-x86_64, build-arm64]
     runs-on: ubuntu-latest
     if: always()
-    
     steps:
       - name: Generate summary
         run: |
           echo "# 🏗️ Z-Gate Build Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Architecture | Status | Size | SHA256 |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------------|--------|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| x86_64 | ${{ needs.build-x86_64.result }} | ${{ needs.build-x86_64.outputs.size }} | \`${{ needs.build-x86_64.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| ARM64 | ${{ needs.build-arm64.result }} | ${{ needs.build-arm64.outputs.size }} | \`${{ needs.build-arm64.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY

@@ -1,55 +1,75 @@
 # ==============================================================================
-# Dockerfile.compiled - Buildroot Output Pre-compilado
+# Dockerfile.compiled - Buildroot Output (Arquitectura Dinámica)
 # ==============================================================================
-# Esta imagen contiene el output de Buildroot YA COMPILADO (kernel + packages)
-# Solo necesita copiar el agente y regenerar ISO (~5 minutos vs 2 horas)
+# Recibe el argumento ARCH para construir SOLO lo necesario.
+# Esto permite que el caché de x86 no invalide al de ARM y viceversa.
 # ==============================================================================
 
 ARG BASE_IMAGE=ghcr.io/marcoar1/zgate-buildroot-base:latest
 FROM ${BASE_IMAGE}
 
+# Argumento inyectado por GitHub Actions (x86_64 o arm64)
+ARG ARCH
+ENV TARGET_ARCH=${ARCH}
+
 WORKDIR /buildroot
 
-# Copiar archivos de configuración
-COPY buildroot/board/zgate/ board/zgate/
-COPY buildroot/configs/ configs/
-COPY buildroot/scripts/ scripts/
-COPY buildroot/*.sh ./
+# Copiamos todo el contexto de Buildroot (Scripts, Boards, Configs)
+COPY buildroot/ .
 
 # ==============================================================================
-# PRE-COMPILAR BUILDROOT OUTPUT (x86_64 + ARM64)
+# LÓGICA CONDICIONAL DE COMPILACIÓN
+# ==============================================================================
+# Usamos un solo RUN con bash para decidir qué compilar según la arquitectura.
+# Esto mantiene la imagen limpia y específica.
 # ==============================================================================
 
-# x86_64 Build
+SHELL ["/bin/bash", "-c"]
+
 RUN set -e && \
+    echo "[🔨] Iniciando compilación para arquitectura: ${TARGET_ARCH}" && \
+    \
+    # Cargar entorno y dependencias comunes
     source scripts/00_env.sh && \
     source scripts/01_deps.sh && \
-    source scripts/02_config.sh && \
-    configure_system && \
-    echo "[🔨] Pre-compiling x86_64 Buildroot output..." && \
-    make zgate_defconfig && \
-    make -j$(nproc) && \
-    echo "[✓] x86_64 output ready"
-
-# ARM64 Build  
-RUN set -e && \
-    source scripts/00_env.sh && \
-    source scripts/01_deps.sh && \
-    source scripts/02_config_arm.sh && \
-    configure_system_arm && \
-    echo "[🔨] Pre-compiling ARM64 Buildroot output..." && \
-    make O=output_arm64 zgate_arm64_defconfig && \
-    make O=output_arm64 -j$(nproc) && \
-    echo "[✓] ARM64 output ready"
-
-# Limpiar archivos temporales para reducir tamaño de imagen
-RUN rm -rf output/build/*/.*stamp_* && \
-    rm -rf output_arm64/build/*/.*stamp_*
+    \
+    if [ "${TARGET_ARCH}" = "arm64" ]; then \
+        echo "[⚙️] Configurando ARM64 (Oracle Cloud)..." && \
+        source scripts/02_config_arm.sh && \
+        configure_system_arm && \
+        # Generar .config y compilar
+        make zgate_arm64_defconfig && \
+        make -j$(nproc); \
+    \
+    elif [ "${TARGET_ARCH}" = "x86_64" ]; then \
+        echo "[⚙️] Configurando x86_64 (Vultr/Generic)..." && \
+        source scripts/02_config.sh && \
+        configure_system && \
+        # Generar .config y compilar
+        make zgate_defconfig && \
+        make -j$(nproc); \
+    \
+    else \
+        echo "❌ Error: Arquitectura no soportada: ${TARGET_ARCH}" && exit 1; \
+    fi && \
+    \
+    echo "[✓] Compilación completa para ${TARGET_ARCH}"
 
 # ==============================================================================
-# ENTRYPOINT: Solo copiar agente y regenerar ISO
+# LIMPIEZA INTELIGENTE (Para reducir tamaño sin romper caché)
 # ==============================================================================
+# Borramos código fuente descargado y temporales de compilación,
+# PERO mantenemos 'output/build' y 'output/host' para que
+# los futuros 'make' detecten que ya está todo compilado.
+# ==============================================================================
+RUN rm -rf dl/* \
+    && rm -rf output/build/host-* \
+    && find output/build -name "*.o" -delete
 
+# ==============================================================================
+# ENTRYPOINT
+# ==============================================================================
+# Copiamos el entrypoint que se encargará de inyectar el Agente
 COPY docker-build-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 

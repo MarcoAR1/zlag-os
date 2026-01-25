@@ -9,14 +9,12 @@ set -euo pipefail
 export TERM=${TERM:-linux}
 
 # ============================================================================
-# PATH SANITIZATION (Windows/macOS compatibility)
+# PATH SANITIZATION
 # ============================================================================
-# Buildroot no tolera espacios en PATH. Limpiar INMEDIATAMENTE.
 clean_path() {
     local NEW_PATH=""
     IFS=':' read -ra PATHS <<< "$PATH"
     for p in "${PATHS[@]}"; do
-        # Solo agregar si no tiene espacios, tabs o newlines
         if [[ ! "$p" =~ [[:space:]] ]]; then
             if [ -z "$NEW_PATH" ]; then
                 NEW_PATH="$p"
@@ -25,16 +23,12 @@ clean_path() {
             fi
         fi
     done
-    
-    # Si quedó vacío o muy corto, asegurar rutas esenciales
     if [ -z "$NEW_PATH" ] || [ $(echo "$NEW_PATH" | tr ':' '\n' | wc -l) -lt 3 ]; then
         NEW_PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     fi
-    
     export PATH="$NEW_PATH"
 }
 
-# Limpiar PATH ANTES de todo (incluyendo imports)
 clean_path
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -44,7 +38,7 @@ ISO_DIR="$SCRIPT_DIR/isos/vultr-x86_64"
 source scripts/00_env.sh
 source scripts/01_deps.sh
 source scripts/02_config.sh
-source scripts/03_agent.sh
+source scripts/03_agent_install.sh  # <--- CORREGIDO: Importamos el instalador
 
 # Función de Cabecera
 header() {
@@ -61,7 +55,7 @@ header() {
 run_full_build() {
     echo -e "${RED}[☢️] LIMPIEZA NUCLEAR DE KERNEL...${NC}"
     rm -rf output/build/linux-6.1.100 
-    rm -f output/build/.fragments_list # Borrar la lista de fragmentos aplicados
+    rm -f output/build/.fragments_list
     rm -f output/images/bzImage
 
     echo -e "${BLUE}[🛠️] Configurando Buildroot...${NC}"
@@ -73,17 +67,13 @@ run_full_build() {
 
 run_update() {
     echo -e "${YELLOW}[⚡] Actualización Rápida...${NC}"
-    configure_system # Regenerar configs por si cambiaron secretos o kernel
-    
-    # Asegurar PATH limpio antes de make
-    echo "Cleaned PATH for make: $PATH"
+    configure_system 
     
     # Detectar si output existe (restaurado desde caché)
     if [ -d "output" ] && [ -f "output/.config" ]; then
-        echo -e "${GREEN}[📦] Output directory detected (from cache), skipping full rebuild${NC}"
-        echo -e "${BLUE}[🔧] Regenerating defconfig and rebuilding only changed files...${NC}"
+        echo -e "${GREEN}[📦] Cache detectado, recompilando cambios...${NC}"
         make zgate_defconfig
-        make -j$JOBS  # Solo recompila lo que cambió (agente + configs)
+        make -j$JOBS
     else
         echo -e "${YELLOW}[🔨] No cache found, running full build...${NC}"
         make zgate_defconfig
@@ -98,24 +88,18 @@ if [ "$1" == "build" ]; then
     check_dependencies
     configure_system
     
-    # Solo compilar agent si NO fue compilado externamente por build.sh
-    if [ ! -f "board/zgate/rootfs-overlay/usr/bin/z-gate-agent" ]; then
-        build_agent
-    else
-        echo -e "${BLUE}[📦] Agent x86_64 ya compilado externamente, omitiendo...${NC}"
-    fi
+    # INSTALACIÓN DEL AGENTE
+    # Llamamos a la función de copia del script 03_agent_install.sh
+    install_prebuilt_agent "x86_64"
     
     run_full_build
 
 elif [ "$1" == "update" ]; then
     header "UPDATE"
     
-    # Solo compilar agent si NO fue compilado externamente por build.sh
-    if [ ! -f "board/zgate/rootfs-overlay/usr/bin/z-gate-agent" ]; then
-        build_agent
-    else
-        echo -e "${BLUE}[📦] Agent x86_64 ya compilado externamente, omitiendo...${NC}"
-    fi
+    # INSTALACIÓN DEL AGENTE
+    # Siempre ejecutamos esto en update para asegurar que el binario sea el más reciente
+    install_prebuilt_agent "x86_64"
     
     run_update
 
@@ -131,18 +115,16 @@ else
     exit 1
 fi
 
+# Verificación de ISO
 if [ -f "$ISO_PATH" ]; then
     echo -e "${GREEN}[✔] ISO GENERADA: $ISO_PATH ($(du -h $ISO_PATH | cut -f1))${NC}"
     
-    # Organizar ISOs para Brain
     echo -e "${YELLOW}Organizing ISOs for Brain deployment...${NC}"
     mkdir -p "$ISO_DIR"
     
-    # Copiar ISO al directorio de Vultr
     cp "$ISO_PATH" "$ISO_DIR/zgate-vultr-x86_64.iso"
     echo -e "${GREEN}✓ Copied: $ISO_DIR/zgate-vultr-x86_64.iso${NC}"
     
-    # Generar SHA256 para Brain
     cd "$ISO_DIR"
     sha256sum zgate-vultr-x86_64.iso > checksums.txt 2>/dev/null || shasum -a 256 zgate-vultr-x86_64.iso > checksums.txt
     echo -e "${GREEN}✓ Generated: $ISO_DIR/checksums.txt${NC}"
@@ -150,6 +132,6 @@ if [ -f "$ISO_PATH" ]; then
     echo -e "\n${GREEN}ISOs ready for Brain at:${NC}"
     ls -lh "$ISO_DIR"
 else
-    echo -e "${RED}[✘] Error: No se generó la ISO.${NC}"
+    echo -e "${RED}[✘] Error: No se generó la ISO en $ISO_PATH.${NC}"
     exit 1
 fi

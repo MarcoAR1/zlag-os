@@ -1,10 +1,4 @@
-# ==============================================================================
-# GitHub Actions Workflow - Z-Gate OS Build (Optimizado)
-# ==============================================================================
-# Usa imagen base pre-construida para builds rápidos
-# ==============================================================================
-
-name: Build Z-Gate OS (Optimized)
+name: Build Z-Gate OS (Smart Cache Multi-Arch)
 
 on:
   push:
@@ -18,7 +12,7 @@ env:
 
 jobs:
   # ==============================================================================
-  # Job 1: Construir/Actualizar imagen base (solo cuando sea necesario)
+  # Job 1: Base Environment (Común para todos)
   # ==============================================================================
   build-base-image:
     runs-on: ubuntu-latest
@@ -26,59 +20,29 @@ jobs:
       contents: read
       packages: write
     outputs:
-      base-exists: ${{ steps.check.outputs.exists }}
-      base-image: ${{ steps.repo.outputs.base_image }}
+      base_image: ${{ steps.repo.outputs.base_image }}
     
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       
-      - name: Set lowercase repository owner
+      - name: Set base image name
         id: repo
         run: |
-          echo "owner_lower=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-          echo "base_image=ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')/zgate-buildroot-base:latest" >> $GITHUB_OUTPUT
-      
-      - name: Check if base image exists
-        id: check
-        run: |
-          if docker pull ${{ steps.repo.outputs.base_image }} 2>/dev/null; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-      
-      - name: Login to GitHub Container Registry
-        if: steps.check.outputs.exists == 'false'
-        uses: docker/login-action@v3
+          echo "base_image=ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')/zgate-base:v1" >> $GITHUB_OUTPUT
+
+      - name: Build Base Image
+        uses: docker/build-push-action@v5
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Build and push base image
-        if: steps.check.outputs.exists == 'false'
-        run: |
-          docker build -f Dockerfile.base -t ${{ steps.repo.outputs.base_image }} .
-          docker push ${{ steps.repo.outputs.base_image }}
-      
-      - name: Scan base image for vulnerabilities
-        if: steps.check.outputs.exists == 'false'
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ steps.repo.outputs.base_image }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-      
-      - name: Upload Trivy results to GitHub Security
-        if: steps.check.outputs.exists == 'false'
-        uses: github/codeql-action/upload-sarif@v2
-        with:
-          sarif_file: 'trivy-results.sarif'
+          context: .
+          file: Dockerfile.base
+          push: true
+          tags: ${{ steps.repo.outputs.base_image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   # ==============================================================================
-  # Job 2: Construir imagen pre-compilada (Buildroot output listo)
+  # Job 2: Buildroot Compiler (Dividido por Arquitectura)
   # ==============================================================================
   build-compiled-image:
     needs: build-base-image
@@ -86,118 +50,168 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      compiled-exists: ${{ steps.check-compiled.outputs.exists }}
-      compiled-image: ${{ steps.repo.outputs.compiled_image }}
+    strategy:
+      matrix:
+        arch: [x86_64, arm64] # <--- AQUÍ ESTÁ LA MAGIA
     
+    outputs:
+      # Exportamos dinámicamente los tags para el siguiente job
+      image-x86_64: ${{ steps.export.outputs.x86_64 }}
+      image-arm64: ${{ steps.export.outputs.arm64 }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
-      - name: Set image names
-        id: repo
+
+      - name: Calculate Config Hash
+        id: config-hash
         run: |
-          echo "compiled_image=ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')/zgate-buildroot-compiled:latest" >> $GITHUB_OUTPUT
-      
-      - name: Check if compiled image exists
-        id: check-compiled
+          # El hash depende de los archivos de configuración
+          HASH=$(cat configs/* scripts/* board/zgate/* | sha256sum | head -c 16)
+          echo "hash=${HASH}" >> $GITHUB_OUTPUT
+
+      - name: Set Docker Metadata
+        id: meta
         run: |
-          if docker pull ${{ steps.repo.outputs.compiled_image }} 2>/dev/null; then
+          # Creamos un nombre ÚNICO por arquitectura
+          IMG="ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')/zgate-compiled-${{ matrix.arch }}"
+          TAG="${{ steps.config-hash.outputs.hash }}"
+          echo "full_tag=${IMG}:${TAG}" >> $GITHUB_OUTPUT
+
+      - name: Check Cache
+        id: check
+        run: |
+          if docker pull ${{ steps.meta.outputs.full_tag }} 2>/dev/null; then
             echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Caché encontrado para ${{ matrix.arch }}"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Recompilando Kernel para ${{ matrix.arch }}..."
           fi
-      
-      - name: Login to GitHub Container Registry
-        if: steps.check-compiled.outputs.exists == 'false'
+
+      - name: Login to GHCR
+        if: steps.check.outputs.exists == 'false'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Build and push compiled image (2 horas, solo primera vez)
-        if: steps.check-compiled.outputs.exists == 'false'
-        run: |
-          docker build -f Dockerfile.compiled \
-            --build-arg BASE_IMAGE=${{ needs.build-base-image.outputs.base-image }} \
-            -t ${{ steps.repo.outputs.compiled_image }} .
-          docker push ${{ steps.repo.outputs.compiled_image }}
+
+      - name: Build and Push Kernel
+        if: steps.check.outputs.exists == 'false'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.compiled
+          push: true
+          tags: ${{ steps.meta.outputs.full_tag }}
+          # Pasamos la arquitectura como argumento al Dockerfile
+          build-args: |
+            BASE_IMAGE=${{ needs.build-base-image.outputs.base_image }}
+            ARCH=${{ matrix.arch }}
 
   # ==============================================================================
-  # Job 3: Build x86_64 ISO (5 min con imagen pre-compilada)
+  # Job 3: Final Assembly (Ensamblaje Rápido)
   # ==============================================================================
-  build-x86_64:
+  # ==============================================================================
+  # Job 3: Final Assembly (Ensamblaje Rápido)
+  # ==============================================================================
+  assemble-final-iso:
     needs: build-compiled-image
     runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      
-      - name: Validate binary integrity
-        run: |
-          cd bin
-          chmod +x validate.sh
-          ./validate.sh
-      
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Build x86_64 ISO (usando imagen pre-compilada)
-        run: |
-          docker run --rm \
-            -e TERM=linux \
-            -v $(pwd)/bin:/workspace/bin:ro \
-            -v $(pwd)/output:/buildroot/isos \
-            ${{ needs.build-compiled-image.outputs.compiled-image }} x86_64
-      
-      - name: Upload x86_64 ISO
-        uses: actions/upload-artifact@v4
-        with:
-          name: zgate-vultr-x86_64
-          path: output/vultr-x86_64/
-          retention-days: 30
+    strategy:
+      matrix:
+        arch: [x86_64, arm64]
+        include:
+          - arch: x86_64
+            artifact_name: zgate-vultr-x86_64
+          - arch: arm64
+            artifact_name: zgate-oracle-arm64
 
-  # ==============================================================================
-  # Job 4: Build ARM64 Image (PARALELO - ejecuta simultáneamente con x86_64)
-  # ==============================================================================
-  build-arm64:
-    needs: build-compiled-image  # Usa imagen pre-compilada
-    runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
-      - name: Validate binary integrity
+
+      - name: Calculate Hash (Again)
+        id: config-hash
         run: |
-          cd bin
-          chmod +x validate.sh
-          ./validate.sh
-      
-      - name: Login to GitHub Container Registry
+          HASH=$(cat configs/* scripts/* board/zgate/* | sha256sum | head -c 16)
+          echo "hash=${HASH}" >> $GITHUB_OUTPUT
+
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Build ARM64 Image (usando imagen pre-compilada)
+
+      - name: Build Final Image
         run: |
+          IMG="ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')/zgate-compiled-${{ matrix.arch }}:${{ steps.config-hash.outputs.hash }}"
+          
+          echo "⚡ Usando imagen cacheada: $IMG"
+          
+          # 1. Montamos 'bin' para meter el agente nuevo
+          # 2. Montamos 'output' del host a '/buildroot/output' del container
+          # 3. NO PASAMOS COMANDO: Dejamos que el Entrypoint haga el trabajo sucio
           docker run --rm \
-            -e TERM=linux \
             -v $(pwd)/bin:/workspace/bin:ro \
-            -v $(pwd)/output:/buildroot/isos \
-            ${{ needs.build-compiled-image.outputs.compiled-image }} arm64
-      
-      - name: Upload ARM64 Image
+            -v $(pwd)/output:/buildroot/output \
+            $IMG
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zgate-oracle-arm64
-          path: output/oracle-arm64/
-          retention-days: 30
+          name: ${{ matrix.artifact_name }}
+          # Buildroot siempre deja los resultados finales aquí:
+          path: output/images/
+          retention-days: 7
+    needs: build-compiled-image
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64, arm64]
+        include:
+          - arch: x86_64
+            artifact_name: zgate-vultr-x86_64
+            output_dir: output/vultr-x86_64
+          - arch: arm64
+            artifact_name: zgate-oracle-arm64
+            output_dir: output/oracle-arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Calculate Hash (Again)
+        id: config-hash
+        run: |
+          HASH=$(cat configs/* scripts/* board/zgate/* | sha256sum | head -c 16)
+          echo "hash=${HASH}" >> $GITHUB_OUTPUT
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Final Image
+        run: |
+          # Reconstruimos el nombre de la imagen basado en el hash actual y la arquitectura
+          IMG="ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')/zgate-compiled-${{ matrix.arch }}:${{ steps.config-hash.outputs.hash }}"
+          
+          echo "⚡ Usando imagen cacheada: $IMG"
+          
+          docker run --rm \
+            -v $(pwd)/bin:/workspace/bin:ro \
+            -v $(pwd)/output:/buildroot/isos \
+            $IMG \
+            /bin/bash -c "./setup.sh update ${{ matrix.arch }}"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.output_dir }}
+          retention-days: 7

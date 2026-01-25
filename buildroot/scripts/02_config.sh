@@ -7,9 +7,9 @@ configure_system() {
     echo -e "${BLUE}[⚙️] Generando archivos de configuración e inyectando ENV...${NC}"
     mkdir -p board/zgate
 
-    # 1. FRAGMENTO DEL KERNEL (Networking + Audio Fix + NFT Fix)
+    # 1. FRAGMENTO DEL KERNEL (SOPORTE TOTAL: LOGGING + INGRESS + FLOW)
     cat <<EOF > board/zgate/linux.fragment
-# --- BUILD FIX: Disable objtool (causes compilation errors) ---
+# --- BUILD FIX ---
 # CONFIG_OBJTOOL is not set
 # CONFIG_UNWINDER_ORC is not set
 CONFIG_UNWINDER_FRAME_POINTER=y
@@ -36,75 +36,99 @@ CONFIG_PACKET=y
 CONFIG_NET_CORE=y
 CONFIG_IP_ADVANCED_ROUTER=y
 CONFIG_IP_MULTIPLE_TABLES=y
+CONFIG_NET_SCHED=y
 
-# --- FIREWALL & NAT ---
+# --- FIREWALL CORE (NETFILTER) ---
 CONFIG_NETFILTER=y
 CONFIG_NETFILTER_ADVANCED=y
+CONFIG_NETFILTER_INGRESS=y       # <--- CRÍTICO: Habilita hook ingress
+CONFIG_NETFILTER_NETLINK_GLUE_CT=y
 CONFIG_NF_CONNTRACK=y
 CONFIG_NF_LOG_COMMON=y
+CONFIG_NETFILTER_XTABLES=y
+
+# --- LOGGING BACKENDS (CRÍTICO: FIX ERROR 'log prefix') ---
+CONFIG_NF_LOG_SYSLOG=y
+CONFIG_NF_LOG_IPV4=y
+CONFIG_NF_LOG_IPV6=y
+
+# --- NFTABLES (FULL SUITE) ---
 CONFIG_NF_TABLES=y
 CONFIG_NF_TABLES_INET=y
 CONFIG_NF_TABLES_IPV4=y
 CONFIG_NF_TABLES_IPV6=y
+CONFIG_NF_TABLES_ARP=y
+CONFIG_NF_TABLES_NETDEV=y
+CONFIG_NF_TABLES_BRIDGE=y
+
+# --- NFTABLES MODULES ---
+CONFIG_NFT_META=y
 CONFIG_NFT_CT=y
-CONFIG_NFT_LOG=y
+CONFIG_NFT_RBTREE=y
+CONFIG_NFT_HASH=y
+CONFIG_NFT_COUNTER=y
+CONFIG_NFT_LOG=y               # Frontend de log
 CONFIG_NFT_LIMIT=y
 CONFIG_NFT_MASQ=y
 CONFIG_NFT_NAT=y
+CONFIG_NFT_TUNNEL=y
+CONFIG_NFT_OBJREF=y
+CONFIG_NFT_QUOTA=y
+CONFIG_NFT_REJECT=y
+CONFIG_NFT_REJECT_INET=y
+CONFIG_NFT_REJECT_IPV4=y
+CONFIG_NFT_REJECT_IPV6=y
+CONFIG_NFT_COMPAT=y
+CONFIG_NFT_CONNLIMIT=y
+CONFIG_NFT_SOCKET=y
+CONFIG_NFT_TPROXY=y
+CONFIG_NFT_SYNPROXY=y
+
+# --- FLOW OFFLOAD (GAMING ACCEL) ---
+CONFIG_NF_FLOW_TABLE=y
+CONFIG_NF_FLOW_TABLE_INET=y
+CONFIG_NF_FLOW_TABLE_IPV4=y
+CONFIG_NF_FLOW_TABLE_IPV6=y
+CONFIG_NFT_FLOW_OFFLOAD=y
+
+# --- TRAFFIC CONTROL (QoS & INGRESS) ---
+CONFIG_NET_CLS_ACT=y
+CONFIG_NET_SCH_INGRESS=y
+
+# --- NAT ---
 CONFIG_NF_NAT=y
 CONFIG_NF_NAT_MASQUERADE=y
-# Soporte para Gaming (DSCP/TOS)
-CONFIG_NFT_TOS=y
-CONFIG_NFT_PAYLOAD=y
-CONFIG_NFT_EXTHDR=y
-CONFIG_NETFILTER_XT_TARGET_DSCP=y
 
-# --- SECURITY HARDENING (Minimal) ---
-# Protección cloud multi-tenant (Spectre/Meltdown)
+# --- SECURITY ---
 CONFIG_SPECULATION_MITIGATIONS=y
 CONFIG_MITIGATION_SPECTRE_V2=y
 CONFIG_MITIGATION_MELTDOWN=y
 CONFIG_MITIGATION_RETBLEED=y
-# Stack overflow protection
 CONFIG_STACKPROTECTOR=y
 CONFIG_STACKPROTECTOR_STRONG=y
-# Memory protection básica
 CONFIG_STRICT_KERNEL_RWX=y
 CONFIG_PAGE_TABLE_ISOLATION=y
 
 # --- VPN & TUNNELING ---
 CONFIG_WIREGUARD=y
 
-# --- REDUNDANCIA ---
-CONFIG_BONDING=y
-CONFIG_VXLAN=y
-
-# --- NETWORK PERFORMANCE (Gaming: ultra-low latency) ---
+# --- NETWORK PERFORMANCE ---
 CONFIG_NET_RX_BUSY_POLL=y
 CONFIG_RPS=y
 CONFIG_RFS_ACCEL=y
-
-# --- XDP & eBPF (Gaming: kernel bypass, -2-5ms latency) ---
-CONFIG_BPF=y
+CONFIG_XDP_SOCKETS=y
 CONFIG_BPF_SYSCALL=y
 CONFIG_BPF_JIT=y
-CONFIG_BPF_JIT_ALWAYS_ON=y
-CONFIG_XDP_SOCKETS=y
-CONFIG_BPF_EVENTS=y
-# Debugging (development only)
-CONFIG_BPF_JIT_DISASM=y
 EOF
 
     # 2. CONFIGURACIÓN BUILDROOT
+    # FIX GRUB: Agregado 'configfile' para evitar error visual
     cat <<EOF > configs/zgate_defconfig
 BR2_x86_64=y
-
-# --- BUILD OPTIMIZATION ---
 BR2_CCACHE=y
 BR2_CCACHE_DIR="/buildroot/dl/ccache"
 BR2_CCACHE_USE_BASEDIR=y
 BR2_JLEVEL=0
-
 BR2_TOOLCHAIN_BUILDROOT=y
 BR2_TOOLCHAIN_BUILDROOT_UCLIBC=y
 BR2_KERNEL_HEADERS_6_1=y
@@ -131,12 +155,9 @@ BR2_ROOTFS_OVERLAY="board/zgate/rootfs-overlay"
 BR2_ROOTFS_POST_BUILD_SCRIPT="board/zgate/post_build.sh"
 BR2_TARGET_ROOTFS_CPIO=y
 BR2_TARGET_ROOTFS_CPIO_GZIP=y
-
-# --- COMPRESSION (ISO size reduction: 50MB → 35MB) ---
 BR2_TARGET_ROOTFS_SQUASHFS=y
 BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
 BR2_TARGET_ROOTFS_SQUASHFS4_XZ_EXTREME=y
-
 BR2_TARGET_ROOTFS_ISO9660=y
 BR2_TARGET_ROOTFS_ISO9660_BOOT_MENU="board/zgate/menu.cfg"
 BR2_TARGET_ROOTFS_ISO9660_HYBRID=y
@@ -144,10 +165,10 @@ BR2_TARGET_GRUB2=y
 BR2_TARGET_GRUB2_PC=y
 BR2_TARGET_GRUB2_BOOT_PARTITION="eltorito"
 BR2_TARGET_GRUB2_BUILTIN_CONFIG_PC="board/zgate/grub-pre.cfg"
-BR2_TARGET_GRUB2_BUILTIN_MODULES_PC="boot linux ext2 fat part_msdos part_gpt normal biosdisk iso9660 search search_fs_file echo test"
+BR2_TARGET_GRUB2_BUILTIN_MODULES_PC="boot linux ext2 fat part_msdos part_gpt normal biosdisk iso9660 search search_fs_file echo test configfile"
 EOF
 
-    # 3. SCRIPTS DE SOPORTE
+    # 3. SCRIPTS DE SOPORTE (POST-BUILD)
     cat <<'EOF' > board/zgate/post_build.sh
 #!/bin/bash
 set -e
@@ -158,75 +179,180 @@ ln -snf ../run ${TARGET_DIR}/var/run
 mkdir -p ${TARGET_DIR}/boot/grub ${TARGET_DIR}/usr/bin ${TARGET_DIR}/sbin
 cp board/zgate/menu.cfg ${TARGET_DIR}/boot/grub/grub.cfg
 
+# === LIMPIEZA DE INIT ===
+echo "🧹 Limpiando scripts init default..."
+rm -f ${TARGET_DIR}/etc/init.d/S*
+
 # Generar /init
 cat > ${TARGET_DIR}/init << 'INITEOF'
 #!/bin/sh
-# Agregamos el PATH aquí para que todo lo que venga después funcione
 export PATH=/sbin:/usr/sbin:/bin:/usr/bin
 
 /bin/mount -t proc proc /proc
 /bin/mount -t sysfs sysfs /sys
 /bin/mount -t devtmpfs devtmpfs /dev
 /bin/mount -t tmpfs tmpfs /run
-mkdir -p /run/lock /run/log /tmp
+mkdir -p /run/lock /run/log /tmp /usr/share/udhcpc
 chmod 1777 /tmp
 
 echo "--- 🚀 Z-GATE OS STARTED ---"
 INITEOF
 
-# Continuar con el script /init (sin expansión de variables)
 cat >> ${TARGET_DIR}/init <<'INITEOF2'
 
-# 🎮 Gaming Network Optimization (ultra-low latency)
-echo "⚡ Aplicando optimizaciones de red para gaming..."
+echo "⚡ Iniciando configuración de red..."
 
-# Busy polling (reduce latencia en ~2-3ms)
-echo 50 > /proc/sys/net/core/busy_poll
-echo 50 > /proc/sys/net/core/busy_read
+# 1. Loopback
+/sbin/ip link set lo up
+/sbin/ip addr add 127.0.0.1/8 dev lo 2>/dev/null || true
 
-# Network backlog aumentado
-echo 300000 > /proc/sys/net/core/netdev_max_backlog
+# 2. CÁLCULO DINÁMICO DE RECURSOS (CPU)
+CPU_COUNT=$(grep -c processor /proc/cpuinfo)
+LAST_CPU=$((CPU_COUNT - 1))
+MASK_DEC=$(( (1 << CPU_COUNT) - 1 ))
+MASK_HEX=$(printf "%x" $MASK_DEC)
 
-# NIC tuning para baja latencia
-ethtool -C eth0 rx-usecs 10 rx-frames 4 2>/dev/null || true
-ethtool -G eth0 rx 4096 tx 4096 2>/dev/null || true
+echo "ℹ️ Hardware detectado: $CPU_COUNT CPUs (Máscara RPS: $MASK_HEX)"
 
-# Deshabilitar offloads (reduce latencia variable)
-ethtool -K eth0 gro off 2>/dev/null || true
-ethtool -K eth0 gso off 2>/dev/null || true
+# 3. AUTODETECCIÓN DE INTERFAZ WAN
+echo "⏳ Detectando interfaz principal..."
+count=0
+IFACE=""
 
-# 🎯 CPU Pinning & Interrupt Affinity (reduce jitter ~1ms)
-echo "⚡ Configurando CPU pinning para latencia consistente..."
-
-# Pin interrupciones de red a CPU0-1
-for irq in $(grep -E 'eth0|virtio0' /proc/interrupts | cut -d: -f1 | tr -d ' '); do
-    echo "0-1" > /proc/irq/$irq/smp_affinity_list 2>/dev/null || true
+# Filtro para ignorar interfaces virtuales
+while [ -z "$IFACE" ] && [ $count -lt 50 ]; do
+    IFACE=$(ls /sys/class/net/ 2>/dev/null | grep -v -E 'lo|sit|wg|bond|dummy|tun|tap' | head -n 1)
+    if [ -z "$IFACE" ]; then
+        sleep 0.1
+        count=$((count+1))
+    fi
 done
 
-# RPS: Pin software IRQs a CPU0-1 (bitmask: 0x3 = CPU0,1)
-for rps in /sys/class/net/eth*/queues/rx-*/rps_cpus; do
-    [ -f "$rps" ] && echo "3" > "$rps" 2>/dev/null || true
-done
+if [ -n "$IFACE" ]; then
+    echo "✅ Interfaz Física Detectada: $IFACE"
+    /sbin/ip link set $IFACE up
 
-echo "✓ Optimizaciones OS aplicadas (CPU pinning, busy polling, RPS/RFS)"
+    # SOLICITAR IP VÍA DHCP
+    echo "🌐 Solicitando IP vía DHCP en $IFACE..."
+    /sbin/udhcpc -b -i $IFACE -s /usr/share/udhcpc/default.script >/dev/null 2>&1 &
 
-echo "🔍 Levantando interfaces..."
+    # === FIX RACE CONDITION: ESPERAR A LA RED ===
+    echo "⏳ Esperando concesión DHCP..."
+    dhcp_wait=0
+    has_ip=0
+    while [ $dhcp_wait -lt 100 ]; do # 10 segundos timeout
+        if ip route | grep -q "default"; then
+            has_ip=1
+            break
+        fi
+        sleep 0.1
+        dhcp_wait=$((dhcp_wait+1))
+    done
+
+    if [ $has_ip -eq 1 ]; then
+        echo "✅ Red Configurada."
+        
+        # === FIX: PRE-CARGAR TABLAS NFTABLES ===
+        # Vital: El agente asume que 'inet filter' existe.
+        echo "🛡️ Inicializando firewall base..."
+        nft add table inet filter
+        nft add chain inet filter input { type filter hook input priority 0 \; policy accept \; }
+        nft add chain inet filter forward { type filter hook forward priority 0 \; policy accept \; }
+        nft add chain inet filter output { type filter hook output priority 0 \; policy accept \; }
+        echo "✅ Firewall base listo."
+        
+        export WAN_IFACE="$IFACE"
+    else
+        echo "⚠️ Timeout esperando DHCP."
+    fi
+
+    # C. OPTIMIZACIONES GAMING
+    echo 50 > /proc/sys/net/core/busy_poll
+    echo 50 > /proc/sys/net/core/busy_read
+    echo 300000 > /proc/sys/net/core/netdev_max_backlog
+    ethtool -C $IFACE rx-usecs 10 rx-frames 4 2>/dev/null || true
+    ethtool -G $IFACE rx 4096 tx 4096 2>/dev/null || true
+    ethtool -K $IFACE gro off 2>/dev/null || true
+    ethtool -K $IFACE gso off 2>/dev/null || true
+
+    # IRQ Affinity
+    echo "⚡ Distribuyendo interrupciones en CPUs 0-$LAST_CPU..."
+    for irq in $(grep -E "$IFACE|virtio" /proc/interrupts | cut -d: -f1 | tr -d ' '); do
+        echo "0-$LAST_CPU" > /proc/irq/$irq/smp_affinity_list 2>/dev/null || true
+    done
+
+    # RPS
+    if [ -d "/sys/class/net/$IFACE/queues" ]; then
+        for rps in /sys/class/net/$IFACE/queues/rx-*/rps_cpus; do
+            [ -f "$rps" ] && echo "$MASK_HEX" > "$rps" 2>/dev/null || true
+        done
+        echo "✓ RPS activado en $IFACE usando máscara $MASK_HEX"
+    fi
+else
+    echo "⚠️ ADVERTENCIA: No se detectó interfaz física."
+fi
+
+# Levantando otras interfaces
 for iface in /sys/class/net/*; do
     ifname=$(basename "$iface")
-    if [ "$ifname" != "lo" ] && [ "$ifname" != "sit0" ]; then
+    if [ "$ifname" != "lo" ] && [ "$ifname" != "sit0" ] && [ "$ifname" != "$IFACE" ]; then
         /sbin/ip link set $ifname up
     fi
 done
+
+# === TEST NFTABLES KERNEL SUPPORT ===
+echo "🧪 Testeando soporte Kernel NFTables..."
+if nft list ruleset > /dev/null 2>&1; then
+    echo "✅ Kernel NFTables: OK"
+else
+    echo "❌ Kernel NFTables: FALLO"
+fi
+
+# === INICIO DEL AGENTE Z-GATE ===
+echo "🚀 Iniciando Z-Gate Agent..."
+if [ -f "/usr/bin/z-gate-agent" ]; then
+    /usr/bin/z-gate-agent &
+else
+    echo "❌ Error: Binario z-gate-agent no encontrado"
+fi
 
 exec /sbin/init
 INITEOF2
 
 chmod 755 ${TARGET_DIR}/init
 
-# Permisos del Agente
-[ -f "${TARGET_DIR}/usr/bin/z-gate-agent" ] && chmod +x ${TARGET_DIR}/usr/bin/z-gate-agent
+# SCRIPT DHCP
+mkdir -p ${TARGET_DIR}/usr/share/udhcpc
+cat > ${TARGET_DIR}/usr/share/udhcpc/default.script << 'DHCPEOF'
+#!/bin/sh
+[ -z "$1" ] && echo "Error: should be called from udhcpc" && exit 1
+case "$1" in
+    deconfig)
+        /sbin/ip addr flush dev $interface
+        ;;
+    bound|renew)
+        /sbin/ip addr add $ip/$mask dev $interface
+        if [ -n "$router" ]; then
+             while /sbin/ip route del default 2>/dev/null ; do :; done
+             for i in $router ; do
+                  /sbin/ip route add default via $i dev $interface
+             done
+        fi
+        if [ -n "$dns" ]; then
+             echo -n > /etc/resolv.conf
+             for i in $dns ; do
+                  echo nameserver $i >> /etc/resolv.conf
+             done
+        fi
+        ;;
+esac
+exit 0
+DHCPEOF
+chmod +x ${TARGET_DIR}/usr/share/udhcpc/default.script
 
-echo "✓ Post-build completado con ZGATE_SECRET inyectado"
+# Permisos
+[ -f "${TARGET_DIR}/usr/bin/z-gate-agent" ] && chmod +x ${TARGET_DIR}/usr/bin/z-gate-agent
+echo "✓ Post-build completado: Full Kernel + Pre-Heat NFT"
 EOF
     chmod +x board/zgate/post_build.sh
 
