@@ -1,92 +1,60 @@
 # ==============================================================================
-# Docker Ignore - Excluir archivos innecesarios del contexto de build
+# Docker Ignore - Optimización de Contexto y Cache
 # ==============================================================================
 
-# IMPORTANTE: Este archivo controla qué se copia al contexto de Docker
-# Solo excluir outputs, NO las configuraciones fuente
-
-# Git
+# Git y Metadatos
 .git
 .gitignore
 .gitattributes
+.github/
 
-# Outputs de build (se generan dentro del contenedor)
+# --- CRÍTICO PARA EL CACHÉ ---
+# Ignoramos bin/ porque el Agente se inyecta por VOLUMEN en el Job 3.
+# Si lo dejamos aquí, cualquier cambio en el Agente invalidará el caché del Kernel.
+bin/
+# -----------------------------
+
+# Outputs de build locales (NUNCA subir estos)
 buildroot/output
 buildroot/output_*
 buildroot/isos
 buildroot/dl
 buildroot/.config
 buildroot/.auto.deps
+output/
+isos/
 
-# Archivos temporales
+# Archivos de Imagen de Disco
+*.iso
+*.img
+*.ext4
+*.qcow2
+*.tar.gz
+
+# Archivos Temporales y Logs
 *.tmp
 *.temp
 *.swp
 *.swo
 *~
-.DS_Store
-
-# Logs
 *.log
 build-*.log
+.DS_Store
+Thumbs.db
 
-# Documentación (no necesaria en la imagen)
-TESTING.md
-COMPARISON.md
-WORKFLOW.md
-QUICK-START*.md
-SETUP*.md
-BUILD-STATUS.md
-SUMMARY.md
+# Documentación e IDEs
+*.md
 docs/
-
-# GitHub workflows (no necesarios en imagen)
-.github/
-
-# IDEs
 .vscode/
 .idea/
 *.iml
 
-# Secrets locales
+# Secrets y Keys (Seguridad)
 .secrets
 *.pem
 *.key
+.env
 
-# Cache de Python
+# Runtime
 __pycache__/
-*.pyc
-*.pyo
-
-# Node modules (si los hubiera)
 node_modules/
-
-# Testing anterior (no usado en build optimizado)
-Dockerfile.test
-docker-test-entrypoint.sh
-test-build.sh
-monitor-build.sh
-
-# MANTENER (NO ignorar):
-# - buildroot/scripts/     → Necesario para generar configs
-# - buildroot/setup*.sh    → Necesario para builds
-# - bin/                   → Binarios del agent
-
-# Binarios compilados (se copian cuando sea necesario)
-# Nota: Los binarios en bin/ SÍ se necesitan, así que no los ignoramos
-
-# Archivos de macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-
-# Archivos de Windows
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-
-# Archivos grandes que no se necesitan
-*.iso
-*.img
-*.ext4
-*.qcow2
