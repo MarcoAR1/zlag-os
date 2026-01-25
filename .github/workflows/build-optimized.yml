@@ -3,8 +3,12 @@ name: Build Z-Gate OS (Smart Cache Multi-Arch)
 on:
   push:
     branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
+    paths:
+      - 'buildroot/**'
+      - 'bin/**'
+      - 'configs/**'
+      - 'scripts/**'
+      - '.github/workflows/build-optimized.yml'
   workflow_dispatch:
 
 env:
@@ -12,7 +16,7 @@ env:
 
 jobs:
   # ==============================================================================
-  # Job 1: Base Environment (Común para todos)
+  # Job 1: Base Environment
   # ==============================================================================
   build-base-image:
     runs-on: ubuntu-latest
@@ -29,9 +33,11 @@ jobs:
       - name: Set base image name
         id: repo
         run: |
-          echo "base_image=ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')/zgate-base:v1" >> $GITHUB_OUTPUT
+          # Convertir a minúsculas para cumplir con estándares de GHCR
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "base_image=ghcr.io/${OWNER_LC}/zgate-base:v1" >> $GITHUB_OUTPUT
 
-      - name: Build Base Image
+      - name: Build and Push Base
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -42,7 +48,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ==============================================================================
-  # Job 2: Buildroot Compiler (Dividido por Arquitectura)
+  # Job 2: Buildroot Compiler (Segregado por Arquitectura con Smart Cache)
   # ==============================================================================
   build-compiled-image:
     needs: build-base-image
@@ -52,13 +58,8 @@ jobs:
       packages: write
     strategy:
       matrix:
-        arch: [x86_64, arm64] # <--- AQUÍ ESTÁ LA MAGIA
+        arch: [x86_64, arm64]
     
-    outputs:
-      # Exportamos dinámicamente los tags para el siguiente job
-      image-x86_64: ${{ steps.export.outputs.x86_64 }}
-      image-arm64: ${{ steps.export.outputs.arm64 }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,15 +67,16 @@ jobs:
       - name: Calculate Config Hash
         id: config-hash
         run: |
-          # El hash depende de los archivos de configuración
+          # Hasheamos los archivos que definen la estructura del OS
+          # Si cambias el binario, el hash NO cambia, reutilizando este Job.
           HASH=$(cat configs/* scripts/* board/zgate/* | sha256sum | head -c 16)
           echo "hash=${HASH}" >> $GITHUB_OUTPUT
 
       - name: Set Docker Metadata
         id: meta
         run: |
-          # Creamos un nombre ÚNICO por arquitectura
-          IMG="ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')/zgate-compiled-${{ matrix.arch }}"
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMG="ghcr.io/${OWNER_LC}/zgate-compiled-${{ matrix.arch }}"
           TAG="${{ steps.config-hash.outputs.hash }}"
           echo "full_tag=${IMG}:${TAG}" >> $GITHUB_OUTPUT
 
@@ -83,10 +85,10 @@ jobs:
         run: |
           if docker pull ${{ steps.meta.outputs.full_tag }} 2>/dev/null; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "✅ Caché encontrado para ${{ matrix.arch }}"
+            echo "✅ Caché de Kernel encontrado para ${{ matrix.arch }}"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "⚠️ Recompilando Kernel para ${{ matrix.arch }}..."
+            echo "⚠️ Configuración nueva: Recompilando Kernel para ${{ matrix.arch }}..."
           fi
 
       - name: Login to GHCR
@@ -97,7 +99,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Kernel
+      - name: Build and Push Compiled Kernel
         if: steps.check.outputs.exists == 'false'
         uses: docker/build-push-action@v5
         with:
@@ -105,16 +107,12 @@ jobs:
           file: Dockerfile.compiled
           push: true
           tags: ${{ steps.meta.outputs.full_tag }}
-          # Pasamos la arquitectura como argumento al Dockerfile
           build-args: |
             BASE_IMAGE=${{ needs.build-base-image.outputs.base_image }}
             ARCH=${{ matrix.arch }}
 
   # ==============================================================================
-  # Job 3: Final Assembly (Ensamblaje Rápido)
-  # ==============================================================================
-  # ==============================================================================
-  # Job 3: Final Assembly (Ensamblaje Rápido)
+  # Job 3: Final Assembly (Inyección de Binarios y Generación de ISO)
   # ==============================================================================
   assemble-final-iso:
     needs: build-compiled-image
@@ -129,10 +127,10 @@ jobs:
             artifact_name: zgate-oracle-arm64
 
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Calculate Hash (Again)
+      - name: Calculate Hash (Para identificar imagen)
         id: config-hash
         run: |
           HASH=$(cat configs/* scripts/* board/zgate/* | sha256sum | head -c 16)
@@ -145,15 +143,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Final Image
+      - name: Build Final Image (${{ matrix.arch }})
         run: |
-          IMG="ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')/zgate-compiled-${{ matrix.arch }}:${{ steps.config-hash.outputs.hash }}"
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMG="ghcr.io/${OWNER_LC}/zgate-compiled-${{ matrix.arch }}:${{ steps.config-hash.outputs.hash }}"
           
-          echo "⚡ Usando imagen cacheada: $IMG"
+          echo "⚡ Usando compilador pre-calentado: $IMG"
           
-          # 1. Montamos 'bin' para meter el agente nuevo
-          # 2. Montamos 'output' del host a '/buildroot/output' del container
-          # 3. NO PASAMOS COMANDO: Dejamos que el Entrypoint haga el trabajo sucio
+          # Mapeamos 'bin/' local que contiene:
+          # - z-gate-agent-x86_64
+          # - z-gate-agent-arm64
+          # El entrypoint detectará su arquitectura y usará el correcto.
           docker run --rm \
             -v $(pwd)/bin:/workspace/bin:ro \
             -v $(pwd)/output:/buildroot/output \
@@ -163,55 +163,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          # Buildroot siempre deja los resultados finales aquí:
+          # Los resultados finales aparecen aquí gracias al volumen mapeado
           path: output/images/
-          retention-days: 7
-    needs: build-compiled-image
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [x86_64, arm64]
-        include:
-          - arch: x86_64
-            artifact_name: zgate-vultr-x86_64
-            output_dir: output/vultr-x86_64
-          - arch: arm64
-            artifact_name: zgate-oracle-arm64
-            output_dir: output/oracle-arm64
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Calculate Hash (Again)
-        id: config-hash
-        run: |
-          HASH=$(cat configs/* scripts/* board/zgate/* | sha256sum | head -c 16)
-          echo "hash=${HASH}" >> $GITHUB_OUTPUT
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Final Image
-        run: |
-          # Reconstruimos el nombre de la imagen basado en el hash actual y la arquitectura
-          IMG="ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')/zgate-compiled-${{ matrix.arch }}:${{ steps.config-hash.outputs.hash }}"
-          
-          echo "⚡ Usando imagen cacheada: $IMG"
-          
-          docker run --rm \
-            -v $(pwd)/bin:/workspace/bin:ro \
-            -v $(pwd)/output:/buildroot/isos \
-            $IMG \
-            /bin/bash -c "./setup.sh update ${{ matrix.arch }}"
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.output_dir }}
           retention-days: 7
