@@ -1,4 +1,4 @@
-name: Build Z-Gate Buildroot ISOs
+name: Build Z-Lag Buildroot ISOs
 
 on:
   push:
@@ -11,7 +11,7 @@ on:
     types: [build-isos]
 
 env:
-  ZGATE_SECRET: ${{ secrets.ZGATE_SECRET }}
+  ZLAG_SECRET: ${{ secrets.ZLAG_SECRET }}
 
 jobs:
   # --------------------------------------------------------------------------
@@ -31,11 +31,11 @@ jobs:
       - name: Build x86_64 Agent
         run: |
           mkdir -p bin
-          GOOS=linux GOARCH=amd64 go build -o bin/z-gate-agent-x86_64 ./cmd/agent 
+          GOOS=linux GOARCH=amd64 go build -o bin/z-lag-agent-x86_64 ./cmd/agent 
           
       - name: Build ARM64 Agent
         run: |
-          GOOS=linux GOARCH=arm64 go build -o bin/z-gate-agent-arm64 ./cmd/agent
+          GOOS=linux GOARCH=arm64 go build -o bin/z-lag-agent-arm64 ./cmd/agent
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4  # <--- CORREGIDO v4
@@ -71,25 +71,25 @@ jobs:
         uses: actions/cache@v4  # <--- CORREGIDO v4
         with:
           path: buildroot/dl
-          key: buildroot-dl-x86-${{ hashFiles('buildroot/configs/zgate_defconfig') }}
+          key: buildroot-dl-x86-${{ hashFiles('buildroot/configs/zlag_defconfig') }}
           restore-keys: |
             buildroot-dl-x86-
 
       - name: Inject Agent
         run: |
-          if [ ! -f bin/z-gate-agent-x86_64 ]; then
+          if [ ! -f bin/z-lag-agent-x86_64 ]; then
             echo "❌ Error: Agent binary missing"
             exit 1
           fi
           
-          mkdir -p buildroot/board/zgate/rootfs-overlay/usr/bin/
-          cp bin/z-gate-agent-x86_64 buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent
-          chmod +x buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent
+          mkdir -p buildroot/board/zlag/rootfs-overlay/usr/bin/
+          cp bin/z-lag-agent-x86_64 buildroot/board/zlag/rootfs-overlay/usr/bin/z-lag-agent
+          chmod +x buildroot/board/zlag/rootfs-overlay/usr/bin/z-lag-agent
 
       - name: Create secrets file
         run: |
           cd buildroot
-          echo "export ZGATE_SECRET='${{ secrets.ZGATE_SECRET }}'" > .secrets
+          echo "export ZLAG_SECRET='${{ secrets.ZLAG_SECRET }}'" > .secrets
           echo "export MAX_MINUTES='120'" >> .secrets
 
       - name: Build Buildroot ISO (x86_64)
@@ -101,19 +101,19 @@ jobs:
         id: hash
         run: |
           cd buildroot/isos/vultr-x86_64
-          SHA256=$(sha256sum zgate-vultr-x86_64.iso | cut -d' ' -f1)
+          SHA256=$(sha256sum zlag-vultr-x86_64.iso | cut -d' ' -f1)
           echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
           echo "short_sha=${SHA256:0:8}" >> $GITHUB_OUTPUT
           
-          SIZE=$(du -h zgate-vultr-x86_64.iso | cut -f1)
+          SIZE=$(du -h zlag-vultr-x86_64.iso | cut -f1)
           echo "size=${SIZE}" >> $GITHUB_OUTPUT
 
       - name: Upload x86_64 ISO artifact
         uses: actions/upload-artifact@v4  # <--- CORREGIDO v4
         with:
-          name: zgate-vultr-x86_64-iso
+          name: zlag-vultr-x86_64-iso
           path: |
-            buildroot/isos/vultr-x86_64/zgate-vultr-x86_64.iso
+            buildroot/isos/vultr-x86_64/zlag-vultr-x86_64.iso
             buildroot/isos/vultr-x86_64/checksums.txt
           retention-days: 90
 
@@ -149,25 +149,25 @@ jobs:
         uses: actions/cache@v4  # <--- CORREGIDO v4
         with:
           path: buildroot/dl
-          key: buildroot-dl-arm64-${{ hashFiles('buildroot/configs/zgate_arm64_defconfig') }}
+          key: buildroot-dl-arm64-${{ hashFiles('buildroot/configs/zlag_arm64_defconfig') }}
           restore-keys: |
             buildroot-dl-arm64-
 
       - name: Inject Agent
         run: |
-          if [ ! -f bin/z-gate-agent-arm64 ]; then
+          if [ ! -f bin/z-lag-agent-arm64 ]; then
             echo "❌ Error: Agent binary missing"
             exit 1
           fi
           
-          mkdir -p buildroot/board/zgate/rootfs-overlay/usr/bin/
-          cp bin/z-gate-agent-arm64 buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent-arm64
-          chmod +x buildroot/board/zgate/rootfs-overlay/usr/bin/z-gate-agent-arm64
+          mkdir -p buildroot/board/zlag/rootfs-overlay/usr/bin/
+          cp bin/z-lag-agent-arm64 buildroot/board/zlag/rootfs-overlay/usr/bin/z-lag-agent-arm64
+          chmod +x buildroot/board/zlag/rootfs-overlay/usr/bin/z-lag-agent-arm64
 
       - name: Create secrets file
         run: |
           cd buildroot
-          echo "export ZGATE_SECRET='${{ secrets.ZGATE_SECRET }}'" > .secrets
+          echo "export ZLAG_SECRET='${{ secrets.ZLAG_SECRET }}'" > .secrets
           echo "export MAX_MINUTES='120'" >> .secrets
 
       - name: Build Buildroot Image (ARM64)
@@ -179,18 +179,18 @@ jobs:
         id: hash
         run: |
           cd buildroot/isos/oracle-arm64
-          SHA256=$(sha256sum zgate-oracle-arm64.ext4 | cut -d' ' -f1)
+          SHA256=$(sha256sum zlag-oracle-arm64.ext4 | cut -d' ' -f1)
           echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
           echo "short_sha=${SHA256:0:8}" >> $GITHUB_OUTPUT
-          SIZE=$(du -h zgate-oracle-arm64.ext4 | cut -f1)
+          SIZE=$(du -h zlag-oracle-arm64.ext4 | cut -f1)
           echo "size=${SIZE}" >> $GITHUB_OUTPUT
 
       - name: Upload ARM64 image artifact
         uses: actions/upload-artifact@v4  # <--- CORREGIDO v4
         with:
-          name: zgate-oracle-arm64-image
+          name: zlag-oracle-arm64-image
           path: |
-            buildroot/isos/oracle-arm64/zgate-oracle-arm64.ext4
+            buildroot/isos/oracle-arm64/zlag-oracle-arm64.ext4
             buildroot/isos/oracle-arm64/checksums.txt
           retention-days: 90
 
@@ -212,13 +212,13 @@ jobs:
       - name: Download x86_64 artifacts
         uses: actions/download-artifact@v4  # <--- CORREGIDO v4
         with:
-          name: zgate-vultr-x86_64-iso
+          name: zlag-vultr-x86_64-iso
           path: ./x86_64
 
       - name: Download ARM64 artifacts
         uses: actions/download-artifact@v4  # <--- CORREGIDO v4
         with:
-          name: zgate-oracle-arm64-image
+          name: zlag-oracle-arm64-image
           path: ./arm64
 
       - name: Generate release tag
@@ -231,9 +231,9 @@ jobs:
         uses: softprops/action-gh-release@v2  # <--- CORREGIDO v2 (la v1 ya es muy vieja)
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          name: "Z-Gate ISOs - $(date +%Y-%m-%d)"
+          name: "Z-Lag ISOs - $(date +%Y-%m-%d)"
           body: |
-            # 🚀 Z-Gate Buildroot ISOs
+            # 🚀 Z-Lag Buildroot ISOs
             **Commit**: `${{ github.sha }}`
             
             ## 📦 Downloads
@@ -244,9 +244,9 @@ jobs:
             - **Size**: ${{ needs.build-arm64.outputs.size }}
             - **SHA256**: `${{ needs.build-arm64.outputs.sha256 }}`
           files: |
-            ./x86_64/zgate-vultr-x86_64.iso
+            ./x86_64/zlag-vultr-x86_64.iso
             ./x86_64/checksums.txt
-            ./arm64/zgate-oracle-arm64.ext4
+            ./arm64/zlag-oracle-arm64.ext4
             ./arm64/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -259,7 +259,7 @@ jobs:
     steps:
       - name: Generate summary
         run: |
-          echo "# 🏗️ Z-Gate Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "# 🏗️ Z-Lag Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "| Architecture | Status | Size | SHA256 |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| x86_64 | ${{ needs.build-x86_64.result }} | ${{ needs.build-x86_64.outputs.size }} | \`${{ needs.build-x86_64.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY

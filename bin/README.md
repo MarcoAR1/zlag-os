@@ -1,11 +1,11 @@
 # Binarios Pre-compilados del Agent
 
-Este directorio contiene los binarios del Z-Gate Agent compilados desde el repositorio privado.
+Este directorio contiene los binarios del Z-Lag Agent compilados desde el repositorio privado.
 
 ## 📦 Archivos
 
-- `z-gate-agent-x86_64` - Agent para Vultr VPS (Linux x86_64)
-- `z-gate-agent-arm64` - Agent para Oracle Cloud (Linux ARM64)
+- `z-lag-agent-x86_64` - Agent para Vultr VPS (Linux x86_64)
+- `z-lag-agent-arm64` - Agent para Oracle Cloud (Linux ARM64)
 
 ## 🔄 Actualización
 
@@ -14,13 +14,13 @@ Estos binarios son actualizados automáticamente desde el repo privado:
 ```bash
 # En repo privado: paseo-vpn-gaming
 make build-agent          # Compila ambas arquitecturas
-make update-zgate-os      # Copia a zgate-os/bin/
+make update-zlag-os      # Copia a zlag-os/bin/
 ```
 
 ## ⚠️ Importante
 
 **NO commitear binarios manualmente aquí.**  
-Usar siempre `make update-zgate-os` desde el repo privado.
+Usar siempre `make update-zlag-os` desde el repo privado.
 
 ## 🔐 Seguridad
 

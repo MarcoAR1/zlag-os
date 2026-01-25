@@ -76,15 +76,15 @@ docker run hello-world
 
 ---
 
-## Build Z-Gate en WSL2 (PC de Escritorio)
+## Build Z-Lag en WSL2 (PC de Escritorio)
 
 ### Setup Inicial
 
 ```bash
 # 1. Clonar repo
 cd ~
-git clone https://github.com/TU_USUARIO/zgate-os.git
-cd zgate-os
+git clone https://github.com/TU_USUARIO/zlag-os.git
+cd zlag-os
 
 # 2. Pull de los últimos cambios
 git pull origin main
@@ -114,24 +114,24 @@ make local-test-x86
 # IMPORTANTE: No instales nada manualmente durante el build
 # La imagen Docker ya tiene todas las dependencias (libelf-dev, etc.)
 # Si falla por dependencias faltantes, rebuildeala imagen base:
-# docker build -f Dockerfile.base -t zgate-buildroot-base:local .
+# docker build -f Dockerfile.base -t zlag-buildroot-base:local .
 
 # O si prefieres más control:
-docker build -f Dockerfile.base -t zgate-buildroot-base:local .
+docker build -f Dockerfile.base -t zlag-buildroot-base:local .
 docker build -f Dockerfile.build \
-  --build-arg BASE_IMAGE=zgate-buildroot-base:local \
-  -t zgate-builder:x86_64-local .
+  --build-arg BASE_IMAGE=zlag-buildroot-base:local \
+  -t zlag-builder:x86_64-local .
 v $(pwd)/output:/buildroot/isos \
-  zgate-builder:x86_64-local x86_64
+  zlag-builder:x86_64-local x86_64
 
 # NOTA: La imagen es auto-suficiente, no requiere instalaciones adicionales  --cpus="$(nproc)" \
   -e TERM=linux \
-  -e ZGATE_SECRET="test-secret" \
+  -e ZLAG_SECRET="test-secret" \
   -v $(pwd)/output:/buildroot/isos \
-  zgate-builder:x86_64-local x86_64
+  zlag-builder:x86_64-local x86_64
 
 # Verificar resultado
-ls -lh output/vultr-x86_64/zgate-vultr-x86_64.iso
+ls -lh output/vultr-x86_64/zlag-vultr-x86_64.iso
 ```
 
 ---
@@ -163,7 +163,7 @@ docker stats
 
 # ❌ MALO - Imagen base incompleta (rebuildeala):
 # fatal error: gelf.h: No such file or directory
-# → docker build -f Dockerfile.base -t zgate-buildroot-base:local .
+# → docker build -f Dockerfile.base -t zlag-buildroot-base:local .
 
 # ❌ MALO - Error de configuración:
 # CONFIG_OBJTOOL is not set but still compiling
@@ -235,7 +235,7 @@ docker builder prune -a
 ## Pushear desde WSL2
 
 ```bash
-cd ~/zgate-os
+cd ~/zlag-os
 
 # Verificar cambios
 git status
@@ -254,19 +254,19 @@ Una vez que el build local **termine sin errores**:
 
 1. **Verificar ISO generado:**
    ```bash
-   ls -lh output/vultr-x86_64/zgate-vultr-x86_64.iso
-   sha256sum output/vultr-x86_64/zgate-vultr-x86_64.iso
+   ls -lh output/vultr-x86_64/zlag-vultr-x86_64.iso
+   sha256sum output/vultr-x86_64/zlag-vultr-x86_64.iso
    ```
 
 2. **Construir imagen pre-compilada (opcional):**
    ```bash
    docker build -f Dockerfile.compiled \
-     --build-arg BASE_IMAGE=zgate-buildroot-base:local \
-     -t zgate-buildroot-compiled:local .
+     --build-arg BASE_IMAGE=zlag-buildroot-base:local \
+     -t zlag-buildroot-compiled:local .
    
    # Tag y push a GHCR
-   docker tag zgate-buildroot-compiled:local ghcr.io/TU_USUARIO/zgate-buildroot-compiled:latest
-   docker push ghcr.io/TU_USUARIO/zgate-buildroot-compiled:latest
+   docker tag zlag-buildroot-compiled:local ghcr.io/TU_USUARIO/zlag-buildroot-compiled:latest
+   docker push ghcr.io/TU_USUARIO/zlag-buildroot-compiled:latest
    ```
 
 3. **Activar GitHub Actions:**
@@ -341,8 +341,8 @@ sudo usermod -aG docker $USER
 newgrp docker
 
 # 2. Clonar y build
-git clone https://github.com/TU_USUARIO/zgate-os.git
-cd zgate-os
+git clone https://github.com/TU_USUARIO/zlag-os.git
+cd zlag-os
 git pull origin main
 
 # 3. Build local (usa todos tus cores)
@@ -351,7 +351,7 @@ make local-test-x86
 # 4. Esperar 15-60 min (según cores)
 
 # 5. Verificar resultado
-ls -lh output/vultr-x86_64/zgate-vultr-x86_64.iso
+ls -lh output/vultr-x86_64/zlag-vultr-x86_64.iso
 ```
 
 ---

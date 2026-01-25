@@ -1,4 +1,4 @@
-# 📝 Backlog de Mejoras - Z-Gate OS
+# 📝 Backlog de Mejoras - Z-Lag OS
 
 > **Última actualización**: 23 de enero de 2026  
 > **Contexto**: Gaming VPN OS - Optimizado para ultra-baja latencia
@@ -78,7 +78,7 @@ ip link set dev eth0 xdp obj xdp_redirect.o
 echo 1 > /proc/irq/$(grep eth0 /proc/interrupts | cut -d: -f1)/smp_affinity_list
 
 # Pin agent a CPU2-3
-taskset -c 2,3 /usr/bin/z-gate-agent
+taskset -c 2,3 /usr/bin/z-lag-agent
 ```
 
 **Prioridad**: MEDIA - Mejora jitter, no latencia absoluta

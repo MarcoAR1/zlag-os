@@ -5,10 +5,10 @@ set -euo pipefail
 
 configure_system() {
     echo -e "${BLUE}[⚙️] Generando archivos de configuración e inyectando ENV...${NC}"
-    mkdir -p board/zgate
+    mkdir -p board/zlag
 
     # 1. FRAGMENTO DEL KERNEL (SOPORTE TOTAL: LOGGING + INGRESS + FLOW)
-    cat <<EOF > board/zgate/linux.fragment
+    cat <<EOF > board/zlag/linux.fragment
 # --- BUILD FIX ---
 # CONFIG_OBJTOOL is not set
 # CONFIG_UNWINDER_ORC is not set
@@ -123,7 +123,7 @@ EOF
 
     # 2. CONFIGURACIÓN BUILDROOT
     # FIX GRUB: Agregado 'configfile' para evitar error visual
-    cat <<EOF > configs/zgate_defconfig
+    cat <<EOF > configs/zlag_defconfig
 BR2_x86_64=y
 BR2_CCACHE=y
 BR2_CCACHE_DIR="/buildroot/dl/ccache"
@@ -138,7 +138,7 @@ BR2_LINUX_KERNEL=y
 BR2_LINUX_KERNEL_CUSTOM_VERSION=y
 BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE="6.1.100"
 BR2_LINUX_KERNEL_USE_ARCH_DEFAULT_CONFIG=y
-BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="board/zgate/linux.fragment"
+BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="board/zlag/linux.fragment"
 BR2_LINUX_KERNEL_NEEDS_HOST_LIBELF=n
 BR2_LINUX_KERNEL_NEEDS_HOST_OPENSSL=n
 BR2_PACKAGE_LIBNFTNL=y
@@ -149,27 +149,27 @@ BR2_PACKAGE_BASH=y
 BR2_PACKAGE_ELFUTILS=y
 BR2_PACKAGE_LLVM=y
 BR2_PACKAGE_CLANG=y
-BR2_TARGET_GENERIC_HOSTNAME="ZGate-Node"
-BR2_TARGET_GENERIC_ISSUE="Welcome to ZGate"
-BR2_ROOTFS_OVERLAY="board/zgate/rootfs-overlay"
-BR2_ROOTFS_POST_BUILD_SCRIPT="board/zgate/post_build.sh"
+BR2_TARGET_GENERIC_HOSTNAME="ZLag-Node"
+BR2_TARGET_GENERIC_ISSUE="Welcome to ZLag"
+BR2_ROOTFS_OVERLAY="board/zlag/rootfs-overlay"
+BR2_ROOTFS_POST_BUILD_SCRIPT="board/zlag/post_build.sh"
 BR2_TARGET_ROOTFS_CPIO=y
 BR2_TARGET_ROOTFS_CPIO_GZIP=y
 BR2_TARGET_ROOTFS_SQUASHFS=y
 BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
 BR2_TARGET_ROOTFS_SQUASHFS4_XZ_EXTREME=y
 BR2_TARGET_ROOTFS_ISO9660=y
-BR2_TARGET_ROOTFS_ISO9660_BOOT_MENU="board/zgate/menu.cfg"
+BR2_TARGET_ROOTFS_ISO9660_BOOT_MENU="board/zlag/menu.cfg"
 BR2_TARGET_ROOTFS_ISO9660_HYBRID=y
 BR2_TARGET_GRUB2=y
 BR2_TARGET_GRUB2_PC=y
 BR2_TARGET_GRUB2_BOOT_PARTITION="eltorito"
-BR2_TARGET_GRUB2_BUILTIN_CONFIG_PC="board/zgate/grub-pre.cfg"
+BR2_TARGET_GRUB2_BUILTIN_CONFIG_PC="board/zlag/grub-pre.cfg"
 BR2_TARGET_GRUB2_BUILTIN_MODULES_PC="boot linux ext2 fat part_msdos part_gpt normal biosdisk iso9660 search search_fs_file echo test configfile"
 EOF
 
     # 3. SCRIPTS DE SOPORTE (POST-BUILD)
-    cat <<'EOF' > board/zgate/post_build.sh
+    cat <<'EOF' > board/zlag/post_build.sh
 #!/bin/bash
 set -e
 TARGET_DIR=$1
@@ -177,7 +177,7 @@ TARGET_DIR=$1
 rm -rf ${TARGET_DIR}/var/run
 ln -snf ../run ${TARGET_DIR}/var/run
 mkdir -p ${TARGET_DIR}/boot/grub ${TARGET_DIR}/usr/bin ${TARGET_DIR}/sbin
-cp board/zgate/menu.cfg ${TARGET_DIR}/boot/grub/grub.cfg
+cp board/zlag/menu.cfg ${TARGET_DIR}/boot/grub/grub.cfg
 
 # === LIMPIEZA DE INIT ===
 echo "🧹 Limpiando scripts init default..."
@@ -195,7 +195,7 @@ export PATH=/sbin:/usr/sbin:/bin:/usr/bin
 mkdir -p /run/lock /run/log /tmp /usr/share/udhcpc
 chmod 1777 /tmp
 
-echo "--- 🚀 Z-GATE OS STARTED ---"
+echo "--- 🚀 Z-Lag OS STARTED ---"
 INITEOF
 
 cat >> ${TARGET_DIR}/init <<'INITEOF2'
@@ -308,12 +308,12 @@ else
     echo "❌ Kernel NFTables: FALLO"
 fi
 
-# === INICIO DEL AGENTE Z-GATE ===
-echo "🚀 Iniciando Z-Gate Agent..."
-if [ -f "/usr/bin/z-gate-agent" ]; then
-    /usr/bin/z-gate-agent &
+# === INICIO DEL AGENTE Z-Lag ===
+echo "🚀 Iniciando Z-Lag Agent..."
+if [ -f "/usr/bin/z-lag-agent" ]; then
+    /usr/bin/z-lag-agent &
 else
-    echo "❌ Error: Binario z-gate-agent no encontrado"
+    echo "❌ Error: Binario z-lag-agent no encontrado"
 fi
 
 exec /sbin/init
@@ -351,22 +351,22 @@ DHCPEOF
 chmod +x ${TARGET_DIR}/usr/share/udhcpc/default.script
 
 # Permisos
-[ -f "${TARGET_DIR}/usr/bin/z-gate-agent" ] && chmod +x ${TARGET_DIR}/usr/bin/z-gate-agent
+[ -f "${TARGET_DIR}/usr/bin/z-lag-agent" ] && chmod +x ${TARGET_DIR}/usr/bin/z-lag-agent
 echo "✓ Post-build completado: Full Kernel + Pre-Heat NFT"
 EOF
-    chmod +x board/zgate/post_build.sh
+    chmod +x board/zlag/post_build.sh
 
     # 4. GRUB CONFIGS
-    cat <<EOF > board/zgate/grub-pre.cfg
+    cat <<EOF > board/zlag/grub-pre.cfg
 set root=(cd)
 set prefix=(cd)/boot/grub
 configfile /boot/grub/grub.cfg
 EOF
 
-    cat <<EOF > board/zgate/menu.cfg
+    cat <<EOF > board/zlag/menu.cfg
 set default=0
 set timeout=3
-menuentry "Z-Gate OS (Prod)" {
+menuentry "Z-Lag OS (Prod)" {
     linux /boot/bzImage console=tty0 console=ttyS0,115200 quiet panic=10 clocksource=hpet
     initrd /boot/initrd
 }

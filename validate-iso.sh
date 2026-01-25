@@ -23,7 +23,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ==============================================================================
 banner() {
     echo -e "${CYAN}====================================================================${NC}"
-    echo -e "${CYAN}  🔍 Z-GATE ISO/IMAGE VALIDATOR${NC}"
+    echo -e "${CYAN}  🔍 Z-Lag ISO/IMAGE VALIDATOR${NC}"
     echo -e "${CYAN}====================================================================${NC}"
     echo ""
 }
@@ -32,7 +32,7 @@ banner() {
 # Validar ISO x86_64
 # ==============================================================================
 validate_x86_64() {
-    local iso_path="$SCRIPT_DIR/buildroot/isos/vultr-x86_64/zgate-vultr-x86_64.iso"
+    local iso_path="$SCRIPT_DIR/buildroot/isos/vultr-x86_64/zlag-vultr-x86_64.iso"
     local checksum_path="$SCRIPT_DIR/buildroot/isos/vultr-x86_64/checksums.txt"
     
     echo -e "${BLUE}📦 Validando ISO x86_64 (Vultr)...${NC}"
@@ -94,7 +94,7 @@ validate_x86_64() {
     if [ "$(uname)" == "Linux" ] && [ -d /mnt ]; then
         echo -e "${CYAN}  Verificando contenido del ISO...${NC}"
         
-        local mount_point="/tmp/zgate-iso-test-$$"
+        local mount_point="/tmp/zlag-iso-test-$$"
         mkdir -p "$mount_point"
         
         if sudo mount -o loop "$iso_path" "$mount_point" 2>/dev/null; then
@@ -136,7 +136,7 @@ validate_x86_64() {
 # Validar imagen ARM64
 # ==============================================================================
 validate_arm64() {
-    local img_path="$SCRIPT_DIR/buildroot/isos/oracle-arm64/zgate-oracle-arm64.ext4"
+    local img_path="$SCRIPT_DIR/buildroot/isos/oracle-arm64/zlag-oracle-arm64.ext4"
     local checksum_path="$SCRIPT_DIR/buildroot/isos/oracle-arm64/checksums.txt"
     
     echo -e "${BLUE}📦 Validando imagen ARM64 (Oracle Cloud)...${NC}"
@@ -235,8 +235,8 @@ validate_configs() {
     echo ""
     
     # Verificar defconfigs
-    local x86_config="$SCRIPT_DIR/buildroot/configs/zgate_defconfig"
-    local arm_config="$SCRIPT_DIR/buildroot/configs/zgate_arm64_defconfig"
+    local x86_config="$SCRIPT_DIR/buildroot/configs/zlag_defconfig"
+    local arm_config="$SCRIPT_DIR/buildroot/configs/zlag_arm64_defconfig"
     
     if [ -f "$x86_config" ]; then
         echo -e "${GREEN}✓ Config x86_64 encontrado${NC}"

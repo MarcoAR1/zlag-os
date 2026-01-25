@@ -1,52 +1,74 @@
 # ==============================================================================
-# 🚀 Z-Gate ISO Builder (Optimizado con imagen base)
+# 🚀 zlag OS - Compilador de Kernel y Sistema (Smart Cache Edition)
 # ==============================================================================
-# Esta imagen usa la base pre-construida para builds rápidos.
-#
-# Uso:
-#   docker build -f Dockerfile.build -t zgate-builder:latest .
-#   docker run --rm -v $(pwd):/workspace zgate-builder:latest x86_64
+# Esta imagen toma la base de zlag y compila el "esqueleto" del SO.
 # ==============================================================================
 
-# Usar la imagen base (local o desde registry)
-ARG BASE_IMAGE=zgate-buildroot-base:latest
+ARG BASE_IMAGE=ghcr.io/marcoar1/zlag-base:v1
 FROM ${BASE_IMAGE}
 
-# Configurar TERM para entornos no-interactivos
+# Recibimos la arquitectura (x86_64 o arm64) desde el Workflow
+ARG ARCH
+ENV TARGET_ARCH=${ARCH}
 ENV TERM=linux
 
 USER root
 
 # ==============================================================================
-# Copiar archivos del proyecto
+# 📦 Sincronización de Fuentes y Configuración
 # ==============================================================================
-WORKDIR /workspace
+# Nota: No copiamos 'bin/' aquí para no romper el caché del Kernel.
+# El agente se inyectará vía volumen en el Job de ensamblaje final.
 
-# Copiar scripts de configuración (estos GENERAN los archivos)
-COPY buildroot/scripts/ /buildroot/scripts/
+WORKDIR /zlag
 
-# Copiar scripts de setup
-COPY buildroot/setup.sh /buildroot/
-COPY buildroot/setup_arm.sh /buildroot/
+# Copiar solo lo necesario para configurar el Kernel y Buildroot
+COPY buildroot/scripts/ ./scripts/
+COPY buildroot/configs/ ./configs/
+COPY buildroot/board/zlag/ ./board/zlag/ 
+COPY buildroot/*.sh ./
 
-# Copiar binarios del agent al workspace temporal
-COPY bin/ /workspace/bin/
+# Asegurar permisos para el usuario builder de la imagen base
+RUN chmod +x *.sh scripts/*.sh && \
+    chown -R zlag-builder:zlag-builder /zlag
 
-# Script de build optimizado
+# ==============================================================================
+# 🔨 Compilación del "Esqueleto" (Kernel + Toolchain)
+# ==============================================================================
+USER zlag-builder
+
+RUN set -e && \
+    source scripts/00_env.sh && \
+    source scripts/01_deps.sh && \
+    if [ "${TARGET_ARCH}" = "x86_64" ]; then \
+        echo "🔨 Compilando base x86_64..." && \
+        source scripts/02_config.sh && \
+        configure_system && \
+        make zlag_defconfig && \
+        make -j$(nproc); \
+    elif [ "${TARGET_ARCH}" = "arm64" ]; then \
+        echo "🔨 Compilando base ARM64..." && \
+        source scripts/02_config_arm.sh && \
+        configure_system_arm && \
+        make zlag_arm64_defconfig && \
+        make -j$(nproc); \
+    fi
+
+# ==============================================================================
+# 🧹 Limpieza Quirúrgica
+# ==============================================================================
+# Eliminamos archivos pesados que no se necesitan para el empaquetado final,
+# manteniendo los .stamp para que el 'make' futuro sea instantáneo.
+RUN rm -rf dl/* && \
+    find output/build -name "*.o" -delete && \
+    rm -rf output/build/host-*
+
+# ==============================================================================
+# 🚀 Entrypoint para Inyección y Ensamblaje
+# ==============================================================================
+USER root
 COPY docker-build-entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh && \
-    chmod +x /buildroot/setup.sh && \
-    chmod +x /buildroot/setup_arm.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Dar permisos
-RUN chown -R builder:builder /workspace && \
-    chown -R builder:builder /buildroot
-
-# ==============================================================================
-# Entrypoint
-# ==============================================================================
-USER builder
-WORKDIR /buildroot
-
+USER zlag-builder
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["both"]

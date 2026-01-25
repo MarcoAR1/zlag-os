@@ -1,104 +1,75 @@
 # ==============================================================================
-# 🏗️ Z-Gate Buildroot Base Image
+# 🏗️ zlag OS - Buildroot Base Image
 # ==============================================================================
-# Esta imagen se construye UNA VEZ y se reutiliza en todos los builds.
-# Contiene Buildroot y todas las dependencias necesarias.
-#
-# Build:
-#   docker build -f Dockerfile.base -t ghcr.io/tu-org/zgate-buildroot-base:latest .
-#
-# Push:
-#   docker push ghcr.io/tu-org/zgate-buildroot-base:latest
+# Esta imagen es el cimiento de zlag. Contiene el toolchain y Buildroot.
+# Reutilizada por los workers de GitHub Actions para builds ultra-rápidos.
 # ==============================================================================
 
 FROM ubuntu:22.04
 
-# Evitar prompts interactivos
+# Configuración de entorno y localización
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
-ENV TERM=linux
+ENV TERM=xterm-256color
 
-# Variables de Buildroot
-ENV BR2_DL_DIR=/buildroot/dl
+# Variables críticas de zlag / Buildroot
+ENV BR2_DL_DIR=/zlag/dl
 ENV BR2_JLEVEL=0
 ENV FORCE_UNSAFE_CONFIGURE=1
-
-# Optimization: Enable ccache and parallel downloads
 ENV BR2_CCACHE=y
-ENV BR2_CCACHE_DIR=/buildroot/dl/ccache
-ENV MAKEFLAGS="-j$(($(nproc) + 2))"
+ENV BR2_CCACHE_DIR=/zlag/dl/ccache
+
+# Optimización de hilos para compilación
+ENV MAKEFLAGS="-j$(($(nproc) + 1))"
 
 # ==============================================================================
-# Instalar dependencias de Buildroot
+# Instalar dependencias estrictas (Kernel + Go Toolchain Support)
 # ==============================================================================
 RUN apt-get update && apt-get install -y \
-    # Dependencias base de Buildroot
-    build-essential \
-    libncurses5-dev \
-    git \
-    bc \
-    wget \
-    cpio \
-    unzip \
-    rsync \
-    file \
-    python3 \
-    python3-pip \
-    # Kernel build tools
-    libelf-dev \
-    libssl-dev \
-    flex \
-    bison \
-    # Compiler cache para builds incrementales
-    ccache \
-    # Parallel downloads
-    aria2 \
-    # Cross-compilation para ARM64
-    gcc-aarch64-linux-gnu \
-    g++-aarch64-linux-gnu \
-    # Herramientas adicionales
-    vim \
-    tree \
+    # Herramientas de compilación esenciales
+    build-essential libncurses5-dev git bc wget cpio unzip rsync file \
+    # Dependencias para Kernel 6.1+ (zlag core)
+    libelf-dev libssl-dev flex bison \
+    # Herramientas de descarga y caché
+    ccache aria2 ca-certificates \
+    # Cross-compilation para nodos zlag en ARM64 (Oracle Cloud)
+    gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+    # Administración mínima
     sudo \
     && rm -rf /var/lib/apt/lists/*
 
-# Configurar wget para ambientes corporativos
+# Configuración de red para descargas de Buildroot
 RUN echo "check_certificate = off" >> /etc/wgetrc
 
 # ==============================================================================
-# Descargar y preparar Buildroot
+# Preparar entorno zlag
 # ==============================================================================
 WORKDIR /tmp
 RUN wget https://buildroot.org/downloads/buildroot-2023.02.1.tar.gz && \
     tar xf buildroot-2023.02.1.tar.gz && \
-    mv buildroot-2023.02.1 /buildroot && \
+    mv buildroot-2023.02.1 /zlag && \
     rm buildroot-2023.02.1.tar.gz
 
-# Crear directorios de cache
-RUN mkdir -p /buildroot/dl && \
-    mkdir -p /buildroot/output
+# Crear estructura de directorios persistentes
+RUN mkdir -p /zlag/dl /zlag/output /zlag/dl/ccache
 
 # ==============================================================================
-# Crear usuario builder
+# Usuario de compilación (builder) para evitar permisos de root en el OS
 # ==============================================================================
-RUN useradd -m -s /bin/bash builder && \
-    echo "builder ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
-    chown -R builder:builder /buildroot
+RUN useradd -m -s /bin/bash zlag-builder && \
+    echo "zlag-builder ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    chown -R zlag-builder:zlag-builder /zlag
 
-WORKDIR /buildroot
-USER builder
+WORKDIR /zlag
+USER zlag-builder
 
-# Pre-cargar algunas dependencias comunes (opcional, acelera builds)
-# RUN make menuconfig && make source
+# Volumen para que las descargas de paquetes no se pierdan entre builds
+VOLUME ["/zlag/dl"]
 
-# Metadata
-LABEL org.opencontainers.image.title="Z-Gate Buildroot Base"
-LABEL org.opencontainers.image.description="Base image with Buildroot for Z-Gate OS builds"
-LABEL org.opencontainers.image.version="1.0.0"
+# Metadata de Marca
+LABEL org.opencontainers.image.title="zlag OS Base"
+LABEL org.opencontainers.image.description="Minimalist Buildroot environment for zlag OS nodes"
+LABEL zlag.version="1.0.0"
 LABEL buildroot.version="2023.02.1"
-LABEL kernel.version="6.1.100"
-LABEL org.opencontainers.image.created="2026-01-23"
-LABEL org.opencontainers.image.authors="Z-Gate Team"
-LABEL org.opencontainers.image.source="https://github.com/zgate/zgate-os"
 
 CMD ["/bin/bash"]

@@ -9,7 +9,7 @@ export TERM=${TERM:-linux}
 # --- RUTAS ---
 export ISO_PATH="output/images/rootfs.iso9660"
 export KERNEL_BUILD_DIR="output/build/linux-6.1.100"
-export AGENT_SRC_DIR="../zgate/agent"
+export AGENT_SRC_DIR="../zlag/agent"
 
 # --- BUILD OPTIMIZATION ---
 # JOBS: cores + 2 para I/O overlap (GitHub Actions: 4 cores → 6 jobs)

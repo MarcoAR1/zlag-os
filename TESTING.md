@@ -1,6 +1,6 @@
 # 🧪 Testing Guide
 
-Guía completa de testing para Z-Gate OS.
+Guía completa de testing para Z-Lag OS.
 
 **Testing rápido (sin builds)**: Ver [docs/TESTING-GUIDE.md](docs/TESTING-GUIDE.md)  
 **Testing completo (builds)**: Continúa leyendo ⬇️
@@ -70,10 +70,10 @@ Esto descarga Ubuntu 22.04 e instala todas las dependencias (~2GB).
 ```bash
 # En el repo PRIVADO (paseo-vpn-gaming)
 cd /path/to/paseo-vpn-gaming
-make build-agent update-zgate-os
+make build-agent update-zlag-os
 ```
 
-Esto copia los binarios a `../zgate-os/bin/`
+Esto copia los binarios a `../zlag-os/bin/`
 
 ### Paso 3: Ejecutar tests
 
@@ -112,7 +112,7 @@ Esto copia los binarios a `../zgate-os/bin/`
 Para testing con secretos reales:
 
 ```bash
-export ZGATE_SECRET="tu-secret-real"
+export ZLAG_SECRET="tu-secret-real"
 export VULTR_API_KEY="tu-api-key"
 
 ./test-build.sh both
@@ -125,14 +125,14 @@ Si no se proporcionan, se usan valores mock para testing.
 ### x86_64 (Vultr)
 ```
 buildroot/isos/vultr-x86_64/
-├── zgate-vultr-x86_64.iso       # ~200-300MB
+├── zlag-vultr-x86_64.iso       # ~200-300MB
 └── checksums.txt                # SHA256
 ```
 
 ### ARM64 (Oracle Cloud)
 ```
 buildroot/isos/oracle-arm64/
-├── zgate-oracle-arm64.ext4      # ~200-300MB
+├── zlag-oracle-arm64.ext4      # ~200-300MB
 └── checksums.txt                # SHA256
 ```
 
@@ -159,7 +159,7 @@ Los logs completos se muestran durante la ejecución del build.
 ./test-build.sh shell
 
 # Dentro del container
-ls -lh /workspace/buildroot/board/zgate/rootfs-overlay/usr/bin/
+ls -lh /workspace/buildroot/board/zlag/rootfs-overlay/usr/bin/
 ```
 
 ## ⚡ Tips de Performance
@@ -186,10 +186,10 @@ Los builds subsecuentes son más rápidos porque Buildroot cachea compilaciones 
 ```bash
 # 1. En repo privado: compilar agent
 cd /path/to/paseo-vpn-gaming
-make build-agent update-zgate-os
+make build-agent update-zlag-os
 
 # 2. En repo público: construir imagen Docker (solo primera vez)
-cd /path/to/zgate-os
+cd /path/to/zlag-os
 ./test-build.sh build
 
 # 3. Test local antes de push

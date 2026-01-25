@@ -1,15 +1,15 @@
 #!/bin/bash
 # ==============================================================================
-# Monitor de Build - Z-Gate ISO Builder
+# Monitor de Build - Z-Lag ISO Builder
 # ==============================================================================
 # Monitorea el progreso del build en tiempo real
 # ==============================================================================
 
-WORKSPACE="/Users/A446116/Documents/persona-projects/zgate-os"
+WORKSPACE="/Users/A446116/Documents/persona-projects/zlag-os"
 LOG_FILE="$WORKSPACE/build-test.log"
 
 echo "======================================================================"
-echo "  📊 MONITOR DE BUILD - Z-GATE"
+echo "  📊 MONITOR DE BUILD - Z-Lag"
 echo "======================================================================"
 echo ""
 
@@ -21,7 +21,7 @@ while true; do
     echo ""
     
     # Verificar si el proceso Docker está corriendo
-    if docker ps | grep -q zgate-builder; then
+    if docker ps | grep -q zlag-builder; then
         echo "✅ Proceso Docker: ACTIVO"
     else
         echo "❌ Proceso Docker: NO ACTIVO"

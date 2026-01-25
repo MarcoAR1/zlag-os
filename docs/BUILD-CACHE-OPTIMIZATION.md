@@ -1,4 +1,4 @@
-# 🚀 Build Cache Optimization - Z-Gate OS
+# 🚀 Build Cache Optimization - Z-Lag OS
 
 ## Problema Original
 
@@ -9,7 +9,7 @@ Cada build en GitHub Actions tomaba **~2 horas** porque Buildroot recompilaba TO
 - Herramientas de desarrollo (gcc, binutils, make, etc.)
 - Drivers de red (e1000, virtio, etc.)
 
-**El problema:** Solo cambiaba el binario del agente (`z-gate-agent-*`), pero se recompilaba todo el sistema.
+**El problema:** Solo cambiaba el binario del agente (`z-lag-agent-*`), pero se recompilaba todo el sistema.
 
 ---
 
@@ -26,7 +26,7 @@ GitHub Actions ahora cachea el directorio `buildroot/output/` completo basado en
     path: |
       buildroot/output/
       buildroot/dl/
-    key: buildroot-x86_64-${{ hashFiles('buildroot/scripts/02_config.sh', 'buildroot/board/zgate/*.fragment', 'buildroot/configs/zgate_defconfig') }}
+    key: buildroot-x86_64-${{ hashFiles('buildroot/scripts/02_config.sh', 'buildroot/board/zlag/*.fragment', 'buildroot/configs/zlag_defconfig') }}
     restore-keys: |
       buildroot-x86_64-
 ```
@@ -38,8 +38,8 @@ GitHub Actions ahora cachea el directorio `buildroot/output/` completo basado en
 #### ¿Cuándo se invalida el caché?
 Solo cuando cambian los archivos de configuración:
 - `buildroot/scripts/02_config.sh` - Configuración del sistema
-- `buildroot/board/zgate/*.fragment` - Fragmentos de kernel
-- `buildroot/configs/zgate_defconfig` - Defconfig de Buildroot
+- `buildroot/board/zlag/*.fragment` - Fragmentos de kernel
+- `buildroot/configs/zlag_defconfig` - Defconfig de Buildroot
 
 **Si solo cambias el agente:** El caché se reutiliza ✅  
 **Si cambias kernel/configs:** Se regenera el caché ⚠️
@@ -54,11 +54,11 @@ Los scripts `setup.sh` y `setup_arm.sh` detectan automáticamente si el output f
 if [ -d "output" ] && [ -f "output/.config" ]; then
     echo "[📦] Output directory detected (from cache), skipping full rebuild"
     echo "[🔧] Regenerating defconfig and rebuilding only changed files..."
-    make zgate_defconfig
+    make zlag_defconfig
     make -j$JOBS  # Solo recompila lo que cambió
 else
     echo "[🔨] No cache found, running full build..."
-    make zgate_defconfig
+    make zlag_defconfig
     make -j$JOBS
 fi
 ```
@@ -179,24 +179,24 @@ GitHub Actions tiene límites de caché:
 ```
 [📦] Output directory detected (from cache), skipping full rebuild
 [🔧] Regenerating defconfig and rebuilding only changed files...
-make zgate_defconfig
+make zlag_defconfig
 make -j4
->>> z-gate-agent-overlay 1.0 Building
->>> z-gate-agent-overlay 1.0 Installing to target
-[✔] ISO GENERADA: output/images/zgate.iso (85M)
+>>> z-lag-agent-overlay 1.0 Building
+>>> z-lag-agent-overlay 1.0 Installing to target
+[✔] ISO GENERADA: output/images/zlag.iso (85M)
 ```
 
 ### Sin Caché (2 horas)
 ```
 [🔨] No cache found, running full build...
-make zgate_defconfig
+make zlag_defconfig
 make -j4
 >>> host-autoconf 2.71 Downloading
 >>> host-automake 1.16.5 Downloading
 >>> linux-6.1.100 Downloading
 >>> python3-3.11.2 Downloading  # 19MB, 2 horas compilando
 ... (200+ paquetes más)
-[✔] ISO GENERADA: output/images/zgate.iso (85M)
+[✔] ISO GENERADA: output/images/zlag.iso (85M)
 ```
 
 ---
@@ -222,7 +222,7 @@ make -j4
 ```bash
 # Verificar que los archivos de config no hayan cambiado
 git diff buildroot/scripts/02_config.sh
-git diff buildroot/board/zgate/*.fragment
+git diff buildroot/board/zlag/*.fragment
 ```
 
 ### Problema: Build falla después de restaurar caché
@@ -264,4 +264,4 @@ path: |
 
 **Última actualización:** Enero 23, 2026  
 **Versión:** 1.0  
-**Autor:** Z-Gate DevOps Team
+**Autor:** Z-Lag DevOps Team

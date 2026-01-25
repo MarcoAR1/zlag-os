@@ -1,4 +1,4 @@
-# Z-Gate OS
+# Z-Lag OS
 
 > 🚀 **Linux OS minimal** optimizado para baja latencia  
 > 📦 **Buildroot-based**: ~50MB ISOs/rootfs  
@@ -29,7 +29,7 @@ Ver [PROJECT.md](PROJECT.md) para detalles técnicos.
 ./test-build.sh arm64         # ARM64 only
 
 # 3. Validate output
-./validate-iso.sh output/zgate-os-x86_64.iso
+./validate-iso.sh output/zlag-os-x86_64.iso
 ```
 
 ### Automated Builds (GitHub Actions)
@@ -46,10 +46,10 @@ Every push to `main` triggers automated build:
 ## 📁 Repository Structure
 
 ```
-zgate-os/
+zlag-os/
 ├── bin/                          # Pre-compiled binaries
-│   ├── z-gate-agent-x86_64
-│   └── z-gate-agent-arm64
+│   ├── z-lag-agent-x86_64
+│   └── z-lag-agent-arm64
 ├── buildroot/                    # Build configurations
 │   ├── scripts/                  # Config generation scripts
 │   └── setup*.sh                 # Setup scripts

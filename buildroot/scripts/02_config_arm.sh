@@ -5,20 +5,20 @@ set -euo pipefail
 
 configure_system_arm() {
     echo -e "${BLUE}[⚙️] Generando configuración ARM64 para Oracle Cloud...${NC}"
-    mkdir -p board/zgate
+    mkdir -p board/zlag
 
     # 1. CREAR CONFIGURACIÓN ARM64 DESDE BASE X86_64
-    if [ -f "configs/zgate_defconfig" ]; then
+    if [ -f "configs/zlag_defconfig" ]; then
         echo -e "${YELLOW}  → Copiando configuración base...${NC}"
-        cp configs/zgate_defconfig configs/zgate_arm64_defconfig
+        cp configs/zlag_defconfig configs/zlag_arm64_defconfig
         
         # Eliminar configuraciones x86_64 incompatibles
-        sed -i '/^BR2_x86_64=y/d' configs/zgate_arm64_defconfig
-        sed -i '/^BR2_TARGET_GRUB2_PC=y/d' configs/zgate_arm64_defconfig
-        sed -i '/^BR2_TARGET_GRUB2_BOOT_PARTITION=/d' configs/zgate_arm64_defconfig
-        sed -i '/^BR2_TARGET_GRUB2_BUILTIN_CONFIG_PC=/d' configs/zgate_arm64_defconfig
-        sed -i '/^BR2_TARGET_GRUB2_BUILTIN_MODULES_PC=/d' configs/zgate_arm64_defconfig
-        sed -i '/^BR2_TARGET_ROOTFS_ISO9660/d' configs/zgate_arm64_defconfig
+        sed -i '/^BR2_x86_64=y/d' configs/zlag_arm64_defconfig
+        sed -i '/^BR2_TARGET_GRUB2_PC=y/d' configs/zlag_arm64_defconfig
+        sed -i '/^BR2_TARGET_GRUB2_BOOT_PARTITION=/d' configs/zlag_arm64_defconfig
+        sed -i '/^BR2_TARGET_GRUB2_BUILTIN_CONFIG_PC=/d' configs/zlag_arm64_defconfig
+        sed -i '/^BR2_TARGET_GRUB2_BUILTIN_MODULES_PC=/d' configs/zlag_arm64_defconfig
+        sed -i '/^BR2_TARGET_ROOTFS_ISO9660/d' configs/zlag_arm64_defconfig
         
         # Insertar Configuración ARM64 al inicio
         sed -i '1i\
@@ -27,16 +27,16 @@ configure_system_arm() {
 # ============================================================================\
 BR2_aarch64=y\
 BR2_cortex_a72=y
-' configs/zgate_arm64_defconfig
+' configs/zlag_arm64_defconfig
         
         # Añadir configuraciones específicas ARM64 al final
-        cat >> configs/zgate_arm64_defconfig << 'EOF'
+        cat >> configs/zlag_arm64_defconfig << 'EOF'
 
 # ============================================================================
 # ARM64-Specific Toolchain and Kernel
 # ============================================================================
-BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="board/zgate/linux_arm64.config"
-BR2_ROOTFS_POST_BUILD_SCRIPT="board/zgate/post_build_arm64.sh"
+BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="board/zlag/linux_arm64.config"
+BR2_ROOTFS_POST_BUILD_SCRIPT="board/zlag/post_build_arm64.sh"
 
 # --- COMPRESSION ---
 BR2_TARGET_ROOTFS_SQUASHFS=y
@@ -51,16 +51,16 @@ BR2_TARGET_ROOTFS_TAR_GZIP=y
 # Boot configuration for Oracle Cloud (UEFI ARM64)
 BR2_TARGET_GRUB2_ARM64_EFI=y
 EOF
-        echo -e "${GREEN}  ✓ ARM64 config created: configs/zgate_arm64_defconfig${NC}"
+        echo -e "${GREEN}  ✓ ARM64 config created: configs/zlag_arm64_defconfig${NC}"
     else
-        echo -e "${RED}ERROR: configs/zgate_defconfig not found${NC}"
+        echo -e "${RED}ERROR: configs/zlag_defconfig not found${NC}"
         exit 1
     fi
 
     # 2. CONFIGURACIÓN DE KERNEL ARM64 (FULL ARMOR + LOGGING + INGRESS)
     # Sincronizado 100% con la versión x86
     echo -e "${YELLOW}  → Generando linux_arm64.config...${NC}"
-    cat > board/zgate/linux_arm64.config << 'EOF'
+    cat > board/zlag/linux_arm64.config << 'EOF'
 # Linux Kernel Configuration for ARM64 (Oracle Cloud Ampere A1)
 CONFIG_ARM64=y
 CONFIG_64BIT=y
@@ -172,7 +172,7 @@ EOF
 
     # 3. POST-BUILD SCRIPT ARM64 (Optimizado y Dinámico)
     echo -e "${YELLOW}  → Generando post_build_arm64.sh...${NC}"
-    cat > board/zgate/post_build_arm64.sh << 'POSTEOF'
+    cat > board/zlag/post_build_arm64.sh << 'POSTEOF'
 #!/bin/bash
 # Post-build script for ARM64 (Oracle Cloud)
 TARGET_DIR=$1
@@ -184,7 +184,7 @@ rm -f ${TARGET_DIR}/etc/init.d/S*
 
 # Instalar GRUB Config (Esto faltaba en versiones anteriores)
 mkdir -p ${TARGET_DIR}/boot/grub
-cp board/zgate/menu.cfg ${TARGET_DIR}/boot/grub/grub.cfg
+cp board/zlag/menu.cfg ${TARGET_DIR}/boot/grub/grub.cfg
 
 # Generar /init
 cat > $TARGET_DIR/init << 'INITEOF'
@@ -199,7 +199,7 @@ mount -t tmpfs tmpfs /run
 mkdir -p /run/lock /run/log /tmp /usr/share/udhcpc
 chmod 1777 /tmp
 
-echo "--- 🚀 Z-GATE OS STARTED (ARM64) ---"
+echo "--- 🚀 Z-Lag OS STARTED (ARM64) ---"
 INITEOF
 
 cat >> $TARGET_DIR/init << 'INITEOF2'
@@ -304,12 +304,12 @@ else
     echo "❌ Kernel NFTables: FALLO"
 fi
 
-# 5. INICIO DEL AGENTE Z-GATE
-echo "🚀 Iniciando Z-Gate Agent (ARM64)..."
-if [ -f "/usr/bin/z-gate-agent" ]; then
-    /usr/bin/z-gate-agent &
+# 5. INICIO DEL AGENTE Z-Lag
+echo "🚀 Iniciando Z-Lag Agent (ARM64)..."
+if [ -f "/usr/bin/z-lag-agent" ]; then
+    /usr/bin/z-lag-agent &
 else
-    echo "❌ Error: Binario z-gate-agent no encontrado."
+    echo "❌ Error: Binario z-lag-agent no encontrado."
 fi
 
 exec /sbin/init
@@ -346,23 +346,23 @@ DHCPEOF
 chmod +x $TARGET_DIR/usr/share/udhcpc/default.script
 
 # Configurar hostname
-echo "zgate-oracle-arm64" > $TARGET_DIR/etc/hostname
+echo "zlag-oracle-arm64" > $TARGET_DIR/etc/hostname
 
 echo "✓ Post-build ARM64 completed"
 POSTEOF
 
-    chmod +x board/zgate/post_build_arm64.sh
+    chmod +x board/zlag/post_build_arm64.sh
 
     # ==================================================================
     # 4. GRUB CONFIG (ARM64 EFI)
     # ==================================================================
     # Nota: ttyAMA0 es para Oracle Cloud (Ampere)
     # Nota: 'Image' es el nombre estándar del kernel ARM64 en Buildroot
-    mkdir -p board/zgate
-    cat <<EOF > board/zgate/menu.cfg
+    mkdir -p board/zlag
+    cat <<EOF > board/zlag/menu.cfg
 set default=0
 set timeout=3
-menuentry "Z-Gate OS (Oracle ARM64)" {
+menuentry "Z-Lag OS (Oracle ARM64)" {
     linux /Image console=ttyAMA0,115200 console=tty0 quiet panic=10 clocksource=arch_sys_counter
 }
 EOF

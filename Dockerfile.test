@@ -1,14 +1,14 @@
 # ==============================================================================
-# 🐳 Z-Gate Build Test Environment
+# 🐳 Z-Lag Build Test Environment
 # ==============================================================================
 # Replica el ambiente de GitHub Actions para testear la generación de ISOs
 # localmente antes de hacer push al repositorio.
 #
 # Uso:
-#   docker build -f Dockerfile.test -t zgate-builder:test .
-#   docker run -v $(pwd):/workspace zgate-builder:test x86_64
-#   docker run -v $(pwd):/workspace zgate-builder:test arm64
-#   docker run -v $(pwd):/workspace zgate-builder:test both
+#   docker build -f Dockerfile.test -t zlag-builder:test .
+#   docker run -v $(pwd):/workspace zlag-builder:test x86_64
+#   docker run -v $(pwd):/workspace zlag-builder:test arm64
+#   docker run -v $(pwd):/workspace zlag-builder:test both
 # ==============================================================================
 
 FROM ubuntu:22.04

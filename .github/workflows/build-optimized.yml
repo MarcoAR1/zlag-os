@@ -1,4 +1,4 @@
-name: Build Z-Gate OS (Smart Cache Multi-Arch)
+name: Build Z-Lag OS (Smart Cache Multi-Arch)
 
 on:
   push:
@@ -35,7 +35,7 @@ jobs:
         run: |
           # Convertir a minúsculas para cumplir con estándares de GHCR
           OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "base_image=ghcr.io/${OWNER_LC}/zgate-base:v1" >> $GITHUB_OUTPUT
+          echo "base_image=ghcr.io/${OWNER_LC}/zlag-base:v1" >> $GITHUB_OUTPUT
 
       - name: Build and Push Base
         uses: docker/build-push-action@v5
@@ -69,14 +69,14 @@ jobs:
         run: |
           # Hasheamos los archivos que definen la estructura del OS
           # Si cambias el binario, el hash NO cambia, reutilizando este Job.
-          HASH=$(cat configs/* scripts/* board/zgate/* | sha256sum | head -c 16)
+          HASH=$(cat configs/* scripts/* board/zlag/* | sha256sum | head -c 16)
           echo "hash=${HASH}" >> $GITHUB_OUTPUT
 
       - name: Set Docker Metadata
         id: meta
         run: |
           OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          IMG="ghcr.io/${OWNER_LC}/zgate-compiled-${{ matrix.arch }}"
+          IMG="ghcr.io/${OWNER_LC}/zlag-compiled-${{ matrix.arch }}"
           TAG="${{ steps.config-hash.outputs.hash }}"
           echo "full_tag=${IMG}:${TAG}" >> $GITHUB_OUTPUT
 
@@ -122,9 +122,9 @@ jobs:
         arch: [x86_64, arm64]
         include:
           - arch: x86_64
-            artifact_name: zgate-vultr-x86_64
+            artifact_name: zlag-vultr-x86_64
           - arch: arm64
-            artifact_name: zgate-oracle-arm64
+            artifact_name: zlag-oracle-arm64
 
     steps:
       - name: Checkout Code
@@ -133,7 +133,7 @@ jobs:
       - name: Calculate Hash (Para identificar imagen)
         id: config-hash
         run: |
-          HASH=$(cat configs/* scripts/* board/zgate/* | sha256sum | head -c 16)
+          HASH=$(cat configs/* scripts/* board/zlag/* | sha256sum | head -c 16)
           echo "hash=${HASH}" >> $GITHUB_OUTPUT
 
       - name: Login to GHCR
@@ -146,13 +146,13 @@ jobs:
       - name: Build Final Image (${{ matrix.arch }})
         run: |
           OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          IMG="ghcr.io/${OWNER_LC}/zgate-compiled-${{ matrix.arch }}:${{ steps.config-hash.outputs.hash }}"
+          IMG="ghcr.io/${OWNER_LC}/zlag-compiled-${{ matrix.arch }}:${{ steps.config-hash.outputs.hash }}"
           
           echo "⚡ Usando compilador pre-calentado: $IMG"
           
           # Mapeamos 'bin/' local que contiene:
-          # - z-gate-agent-x86_64
-          # - z-gate-agent-arm64
+          # - z-lag-agent-x86_64
+          # - z-lag-agent-arm64
           # El entrypoint detectará su arquitectura y usará el correcto.
           docker run --rm \
             -v $(pwd)/bin:/workspace/bin:ro \

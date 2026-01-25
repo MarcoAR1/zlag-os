@@ -1,8 +1,8 @@
-# Z-Gate OS
+# Z-Lag OS
 
 ## 🎮 Qué es
 
-**Z-Gate OS** es un sistema operativo Linux ultra-minimal optimizado para infraestructura de red con baja latencia.
+**Z-Lag OS** es un sistema operativo Linux ultra-minimal optimizado para infraestructura de red con baja latencia.
 
 ## 🎯 Para qué sirve
 

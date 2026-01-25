@@ -1,5 +1,5 @@
 # ==============================================================================
-# Z-Gate OS - Makefile para Testing y Build Local
+# Z-Lag OS - Makefile para Testing y Build Local
 # ==============================================================================
 # Simplifica los comandos de testing y build optimizado
 #
@@ -15,10 +15,10 @@
 .PHONY: local-test-x86 local-test-arm
 
 # Variables
-DOCKER_IMAGE := zgate-builder:test
-BASE_IMAGE := zgate-buildroot-base:latest
-BUILD_IMAGE := zgate-builder:latest
-GHCR_BASE := ghcr.io/$(shell git config --get remote.origin.url | sed 's/.*github.com[:/]//;s/.git$$//' | tr '[:upper:]' '[:lower:]' 2>/dev/null || echo "owner/repo")/zgate-buildroot-base:latest
+DOCKER_IMAGE := zlag-builder:test
+BASE_IMAGE := zlag-buildroot-base:latest
+BUILD_IMAGE := zlag-builder:latest
+GHCR_BASE := ghcr.io/$(shell git config --get remote.origin.url | sed 's/.*github.com[:/]//;s/.git$$//' | tr '[:upper:]' '[:lower:]' 2>/dev/null || echo "owner/repo")/zlag-buildroot-base:latest
 
 # Colores para output
 RED := \033[0;31m
@@ -34,7 +34,7 @@ NC := \033[0m
 help:
 	@echo ""
 	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════════════╗$(NC)"
-	@echo "$(CYAN)║$(NC)  🛡️  Z-GATE OS - BUILD & TEST COMMANDS                    $(CYAN)║$(NC)"
+	@echo "$(CYAN)║$(NC)  🛡️  Z-Lag OS - BUILD & TEST COMMANDS                    $(CYAN)║$(NC)"
 	@echo "$(CYAN)╚═══════════════════════════════════════════════════════════════════╝$(NC)"
 	@echo ""
 	@echo "$(GREEN)📦 Builds Optimizados (Recomendado):$(NC)"
@@ -161,16 +161,16 @@ info:
 	@docker --version || echo "  $(RED)Docker no instalado$(NC)"
 	@echo ""
 	@echo "Binarios del agent:"
-	@ls -lh bin/z-gate-agent-* 2>/dev/null || echo "  $(YELLOW)No encontrados (ejecuta 'make update-agent' en repo privado)$(NC)"
+	@ls -lh bin/z-lag-agent-* 2>/dev/null || echo "  $(YELLOW)No encontrados (ejecuta 'make update-agent' en repo privado)$(NC)"
 	@echo ""
 	@echo "ISOs generados:"
-	@if [ -f buildroot/isos/vultr-x86_64/zgate-vultr-x86_64.iso ]; then \
-		echo "  $(GREEN)✓ x86_64:$(NC) $$(du -h buildroot/isos/vultr-x86_64/zgate-vultr-x86_64.iso | cut -f1)"; \
+	@if [ -f buildroot/isos/vultr-x86_64/zlag-vultr-x86_64.iso ]; then \
+		echo "  $(GREEN)✓ x86_64:$(NC) $$(du -h buildroot/isos/vultr-x86_64/zlag-vultr-x86_64.iso | cut -f1)"; \
 	else \
 		echo "  $(YELLOW)✗ x86_64 no generado$(NC)"; \
 	fi
-	@if [ -f buildroot/isos/oracle-arm64/zgate-oracle-arm64.ext4 ]; then \
-		echo "  $(GREEN)✓ ARM64:$(NC) $$(du -h buildroot/isos/oracle-arm64/zgate-oracle-arm64.ext4 | cut -f1)"; \
+	@if [ -f buildroot/isos/oracle-arm64/zlag-oracle-arm64.ext4 ]; then \
+		echo "  $(GREEN)✓ ARM64:$(NC) $$(du -h buildroot/isos/oracle-arm64/zlag-oracle-arm64.ext4 | cut -f1)"; \
 	else \
 		echo "  $(YELLOW)✗ ARM64 no generado$(NC)"; \
 	fi
@@ -215,7 +215,7 @@ build-x86: build-base
 		--memory="8g" \
 		--memory-swap="10g" \
 		-v $(PWD):/workspace \
-		-v zgate-ccache:/buildroot/dl/ccache \
+		-v zlag-ccache:/buildroot/dl/ccache \
 		$(BUILD_IMAGE) x86_64
 	@echo "$(GREEN)✅ x86_64 ISO generado (ccache enabled)$(NC)"
 
@@ -227,7 +227,7 @@ build-arm: build-base
 		--memory="8g" \
 		--memory-swap="10g" \
 		-v $(PWD):/workspace \
-		-v zgate-ccache:/buildroot/dl/ccache \
+		-v zlag-ccache:/buildroot/dl/ccache \
 		$(BUILD_IMAGE) arm64
 	@echo "$(GREEN)✅ ARM64 Image generado (ccache enabled)$(NC)"
 
@@ -239,7 +239,7 @@ build-both: build-base
 		--memory="8g" \
 		--memory-swap="10g" \
 		-v $(PWD):/workspace \
-		-v zgate-ccache:/buildroot/dl/ccache \
+		-v zlag-ccache:/buildroot/dl/ccache \
 		$(BUILD_IMAGE) both \
 		--memory-swap="10g" \
 		-v $(PWD):/workspace $(BUILD_IMAGE) both
@@ -267,22 +267,22 @@ local-test-x86:
 	@echo "$(CYAN)╚═══════════════════════════════════════════════════════════╝$(NC)"
 	@echo ""
 	@echo "$(YELLOW)[1/3] Building base image...$(NC)"
-	docker build -f Dockerfile.base -t zgate-buildroot-base:local .
+	docker build -f Dockerfile.base -t zlag-buildroot-base:local .
 	@echo ""
 	@echo "$(YELLOW)[2/3] Building x86_64 (esto tomará 1-2 horas primera vez)...$(NC)"
 	docker build -f Dockerfile.build \
-		--build-arg BASE_IMAGE=zgate-buildroot-base:local \
-		-t zgate-builder:x86_64-local .
+		--build-arg BASE_IMAGE=zlag-buildroot-base:local \
+		-t zlag-builder:x86_64-local .
 	@echo ""
 	@echo "$(YELLOW)[3/3] Running build...$(NC)"
 	mkdir -p output
 	docker run --rm \
 		-e TERM=linux \
 		-v $(PWD)/output:/buildroot/isos \
-		zgate-builder:x86_64-local x86_64
+		zlag-builder:x86_64-local x86_64
 	@echo ""
 	@echo "$(GREEN)✅ SUCCESS! ISO generado en: output/vultr-x86_64/$(NC)"
-	@ls -lh output/vultr-x86_64/zgate-vultr-x86_64.iso
+	@ls -lh output/vultr-x86_64/zlag-vultr-x86_64.iso
 
 local-test-arm:
 	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════╗$(NC)"
@@ -290,22 +290,22 @@ local-test-arm:
 	@echo "$(CYAN)╚═══════════════════════════════════════════════════════════╝$(NC)"
 	@echo ""
 	@echo "$(YELLOW)[1/3] Building base image...$(NC)"
-	docker build -f Dockerfile.base -t zgate-buildroot-base:local .
+	docker build -f Dockerfile.base -t zlag-buildroot-base:local .
 	@echo ""
 	@echo "$(YELLOW)[2/3] Building ARM64 (esto tomará 1-2 horas primera vez)...$(NC)"
 	docker build -f Dockerfile.build \
-		--build-arg BASE_IMAGE=zgate-buildroot-base:local \
-		-t zgate-builder:arm64-local .
+		--build-arg BASE_IMAGE=zlag-buildroot-base:local \
+		-t zlag-builder:arm64-local .
 	@echo ""
 	@echo "$(YELLOW)[3/3] Running build...$(NC)"
 	mkdir -p output
 	docker run --rm \
 		-e TERM=linux \
 		-v $(PWD)/output:/buildroot/isos \
-		zgate-builder:arm64-local arm64
+		zlag-builder:arm64-local arm64
 	@echo ""
 	@echo "$(GREEN)✅ SUCCESS! Image generado en: output/oracle-arm64/$(NC)"
-	@ls -lh output/oracle-arm64/zgate-oracle-arm64.ext4
+	@ls -lh output/oracle-arm64/zlag-oracle-arm64.ext4
 
 
 	@echo "  git push origin main"

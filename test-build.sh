@@ -24,7 +24,7 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-DOCKER_IMAGE="zgate-builder:test"
+DOCKER_IMAGE="zlag-builder:test"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ==============================================================================
@@ -32,7 +32,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ==============================================================================
 banner() {
     echo -e "${CYAN}====================================================================${NC}"
-    echo -e "${CYAN}  🧪 Z-GATE BUILD TEST RUNNER${NC}"
+    echo -e "${CYAN}  🧪 Z-Lag BUILD TEST RUNNER${NC}"
     echo -e "${CYAN}====================================================================${NC}"
     echo ""
 }
@@ -56,20 +56,20 @@ check_docker() {
 check_binaries() {
     echo -e "${YELLOW}Verificando binarios del agent...${NC}"
     
-    if [ ! -f "$SCRIPT_DIR/bin/z-gate-agent-x86_64" ]; then
-        echo -e "${RED}❌ Falta: bin/z-gate-agent-x86_64${NC}"
+    if [ ! -f "$SCRIPT_DIR/bin/z-lag-agent-x86_64" ]; then
+        echo -e "${RED}❌ Falta: bin/z-lag-agent-x86_64${NC}"
         echo -e "${YELLOW}Ejecuta 'make update-agent' en el repo privado primero${NC}"
         exit 1
     fi
     
-    if [ ! -f "$SCRIPT_DIR/bin/z-gate-agent-arm64" ]; then
-        echo -e "${RED}❌ Falta: bin/z-gate-agent-arm64${NC}"
+    if [ ! -f "$SCRIPT_DIR/bin/z-lag-agent-arm64" ]; then
+        echo -e "${RED}❌ Falta: bin/z-lag-agent-arm64${NC}"
         echo -e "${YELLOW}Ejecuta 'make update-agent' en el repo privado primero${NC}"
         exit 1
     fi
     
     echo -e "${GREEN}✓ Binarios del agent encontrados${NC}"
-    ls -lh "$SCRIPT_DIR/bin/z-gate-agent-"*
+    ls -lh "$SCRIPT_DIR/bin/z-lag-agent-"*
     echo ""
 }
 
@@ -133,9 +133,9 @@ cmd_verify() {
     echo ""
     
     # Verificar x86_64
-    if [ -f "$SCRIPT_DIR/buildroot/isos/vultr-x86_64/zgate-vultr-x86_64.iso" ]; then
+    if [ -f "$SCRIPT_DIR/buildroot/isos/vultr-x86_64/zlag-vultr-x86_64.iso" ]; then
         echo -e "${GREEN}✓ x86_64 ISO encontrado:${NC}"
-        ls -lh "$SCRIPT_DIR/buildroot/isos/vultr-x86_64/zgate-vultr-x86_64.iso"
+        ls -lh "$SCRIPT_DIR/buildroot/isos/vultr-x86_64/zlag-vultr-x86_64.iso"
         
         if [ -f "$SCRIPT_DIR/buildroot/isos/vultr-x86_64/checksums.txt" ]; then
             echo -e "${CYAN}Checksums:${NC}"
@@ -148,9 +148,9 @@ cmd_verify() {
     echo ""
     
     # Verificar ARM64
-    if [ -f "$SCRIPT_DIR/buildroot/isos/oracle-arm64/zgate-oracle-arm64.ext4" ]; then
+    if [ -f "$SCRIPT_DIR/buildroot/isos/oracle-arm64/zlag-oracle-arm64.ext4" ]; then
         echo -e "${GREEN}✓ ARM64 imagen encontrada:${NC}"
-        ls -lh "$SCRIPT_DIR/buildroot/isos/oracle-arm64/zgate-oracle-arm64.ext4"
+        ls -lh "$SCRIPT_DIR/buildroot/isos/oracle-arm64/zlag-oracle-arm64.ext4"
         
         if [ -f "$SCRIPT_DIR/buildroot/isos/oracle-arm64/checksums.txt" ]; then
             echo -e "${CYAN}Checksums:${NC}"

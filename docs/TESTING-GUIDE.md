@@ -1,4 +1,4 @@
-# 🧪 Testing Guide - Z-Gate OS
+# 🧪 Testing Guide - Z-Lag OS
 
 **Objetivo**: Testear cambios al OS sin tener que buildear el ISO completo cada vez (10 minutos).
 
@@ -150,7 +150,7 @@ make buildroot-dryrun
 buildroot-dryrun:
 	@echo "🧪 Dry-run de Buildroot..."
 	@docker run --rm -v $(PWD):/workspace \
-		zgate-builder:test bash -c " \
+		zlag-builder:test bash -c " \
 			cd /workspace/buildroot && \
 			make defconfig BR2_DEFCONFIG=defconfig && \
 			make show-info && \
@@ -205,8 +205,8 @@ test-incremental:
 	@echo "🧪 Build incremental (con cache)..."
 	@docker build -f Dockerfile.test \
 		--target test-stage \
-		--cache-from zgate-builder:test \
-		-t zgate-builder:test-incremental .
+		--cache-from zlag-builder:test \
+		-t zlag-builder:test-incremental .
 	@echo "✅ Build incremental OK"
 ```
 
@@ -228,12 +228,12 @@ make test-qemu
 .PHONY: test-qemu
 test-qemu:
 	@echo "🖥️  Booting ISO en QEMU..."
-	@if [ ! -f output/zgate-x86_64.iso ]; then \
+	@if [ ! -f output/zlag-x86_64.iso ]; then \
 		echo "❌ ISO no encontrado. Run: make build-x86"; \
 		exit 1; \
 	fi
 	@qemu-system-x86_64 \
-		-cdrom output/zgate-x86_64.iso \
+		-cdrom output/zlag-x86_64.iso \
 		-m 512 \
 		-nographic \
 		-serial mon:stdio \
@@ -258,7 +258,7 @@ make test-qemu-network
 test-qemu-network:
 	@echo "🌐 Testing network en QEMU..."
 	@qemu-system-x86_64 \
-		-cdrom output/zgate-x86_64.iso \
+		-cdrom output/zlag-x86_64.iso \
 		-m 1024 \
 		-netdev user,id=net0 \
 		-device virtio-net-pci,netdev=net0 \
@@ -287,7 +287,7 @@ make validate-runtime
 **Crear**: `scripts/validate-runtime.sh` (ejecutar dentro del OS)
 ```bash
 #!/bin/sh
-# Ejecutar dentro de Z-Gate OS para verificar optimizaciones
+# Ejecutar dentro de Z-Lag OS para verificar optimizaciones
 
 echo "🔍 Validando optimizaciones de runtime..."
 
@@ -341,7 +341,7 @@ echo "Uptime: $(uptime)"
 **Crear**: `scripts/benchmark-latency.sh`
 ```bash
 #!/bin/sh
-# Benchmark de latencia de red (ejecutar en Z-Gate OS)
+# Benchmark de latencia de red (ejecutar en Z-Lag OS)
 
 echo "📊 Benchmark de latencia..."
 

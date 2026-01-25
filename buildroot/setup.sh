@@ -1,11 +1,11 @@
 #!/bin/bash
 # ==============================================================================
-#  🛡️ Z-GATE CORE ORCHESTRATOR v34.0 (MODULAR) - Vultr x86_64
+# 🛡️ ZLAG CORE ORCHESTRATOR v1.0 - Vultr x86_64
 # ==============================================================================
 
 set -euo pipefail
 
-# Configurar TERM para entornos no-interactivos (GitHub Actions)
+# Configurar TERM para entornos no-interactivos
 export TERM=${TERM:-linux}
 
 # ============================================================================
@@ -32,51 +32,63 @@ clean_path() {
 clean_path
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Ruta de salida estandarizada para Zlag/Vultr
 ISO_DIR="$SCRIPT_DIR/isos/vultr-x86_64"
+# Nombre esperado de la ISO generado por Buildroot
+ISO_PATH="$SCRIPT_DIR/output/images/rootfs.iso9660"
 
 # Importar Módulos
 source scripts/00_env.sh
 source scripts/01_deps.sh
 source scripts/02_config.sh
-source scripts/03_agent_install.sh  # <--- CORREGIDO: Importamos el instalador
+
+# Manejo seguro del script de instalación de agente
+if [ -f "scripts/03_agent_install.sh" ]; then
+    source scripts/03_agent_install.sh
+else
+    # Mock function si el script no existe (para evitar crash en bootstapping)
+    install_prebuilt_agent() { echo -e "${YELLOW}[!] Agent installer script missing, skipping injection.${NC}"; }
+fi
 
 # Función de Cabecera
 header() {
     clear
     echo -e "${CYAN}====================================================${NC}"
-    echo -e "${CYAN}       🛡️  Z-GATE CORE | ORCHESTRATOR v34.0       ${NC}"
+    echo -e "${CYAN}      🛡️  ZLAG OS CORE | ORCHESTRATOR x86_64       ${NC}"
     echo -e "${CYAN}====================================================${NC}"
     echo -e "Modo: ${YELLOW}$1${NC} | Jobs: ${YELLOW}$JOBS${NC}"
-    echo -e "Audio Fix: ${GREEN}ACTIVE${NC}"
+    echo -e "Arch: ${GREEN}x86_64 (Vultr)${NC}"
     echo -e "----------------------------------------------------"
 }
 
-# Lógica de Make
+# Lógica de Make (Full Build)
 run_full_build() {
     echo -e "${RED}[☢️] LIMPIEZA NUCLEAR DE KERNEL...${NC}"
-    rm -rf output/build/linux-6.1.100 
-    rm -f output/build/.fragments_list
+    rm -rf output/build/linux-* rm -f output/build/.fragments_list
     rm -f output/images/bzImage
 
-    echo -e "${BLUE}[🛠️] Configurando Buildroot...${NC}"
-    make zgate_defconfig
+    echo -e "${BLUE}[🛠️] Configurando Buildroot (Zlag Profile)...${NC}"
+    make zlag_defconfig
     
-    echo -e "${BLUE}[🔨] Compilando (10-15 min)...${NC}"
+    echo -e "${BLUE}[🔨] Compilando Kernel y Toolchain (Esto puede tardar)...${NC}"
     make -j$JOBS
 }
 
+# Lógica de Update (Ensamblaje Rápido)
 run_update() {
-    echo -e "${YELLOW}[⚡] Actualización Rápida...${NC}"
+    echo -e "${YELLOW}[⚡] Actualización Rápida (RootFS Rebuild)...${NC}"
     configure_system 
     
-    # Detectar si output existe (restaurado desde caché)
+    # Truco para forzar regeneración de ISO sin recompilar todo
+    rm -f output/images/rootfs.iso9660
+    
     if [ -d "output" ] && [ -f "output/.config" ]; then
-        echo -e "${GREEN}[📦] Cache detectado, recompilando cambios...${NC}"
-        make zgate_defconfig
+        echo -e "${GREEN}[📦] Cache detectado, ensamblando ISO...${NC}"
+        make zlag_defconfig
         make -j$JOBS
     else
-        echo -e "${YELLOW}[🔨] No cache found, running full build...${NC}"
-        make zgate_defconfig
+        echo -e "${YELLOW}[🔨] No cache found, running full build fallback...${NC}"
+        make zlag_defconfig
         make -j$JOBS
     fi
 }
@@ -88,17 +100,22 @@ if [ "$1" == "build" ]; then
     check_dependencies
     configure_system
     
-    # INSTALACIÓN DEL AGENTE
-    # Llamamos a la función de copia del script 03_agent_install.sh
-    install_prebuilt_agent "x86_64"
+    # INSTALACIÓN DEL AGENTE (OPCIONAL EN BUILD)
+    # Si estamos creando la imagen base de Docker, el binario no existe aún.
+    # No queremos que falle el build del Kernel por falta del agente.
+    if [ -f "bin/z-lag-agent-x86_64" ]; then
+        install_prebuilt_agent "x86_64"
+    else
+        echo -e "${YELLOW}[!] Agente binario no encontrado. Continuando solo con compilación de Kernel.${NC}"
+    fi
     
     run_full_build
 
 elif [ "$1" == "update" ]; then
     header "UPDATE"
     
-    # INSTALACIÓN DEL AGENTE
-    # Siempre ejecutamos esto en update para asegurar que el binario sea el más reciente
+    # INSTALACIÓN DEL AGENTE (MANDATORIA EN UPDATE)
+    # Si estamos haciendo un update, ES para meter el agente nuevo.
     install_prebuilt_agent "x86_64"
     
     run_update
@@ -115,23 +132,32 @@ else
     exit 1
 fi
 
-# Verificación de ISO
+# ============================================================================
+# GESTIÓN DE ARTEFACTOS
+# ============================================================================
+# Solo intentamos mover la ISO si realmente se generó
 if [ -f "$ISO_PATH" ]; then
-    echo -e "${GREEN}[✔] ISO GENERADA: $ISO_PATH ($(du -h $ISO_PATH | cut -f1))${NC}"
+    FINAL_NAME="zlag-vultr-x86_64.iso"
     
-    echo -e "${YELLOW}Organizing ISOs for Brain deployment...${NC}"
+    echo -e "${GREEN}[✔] BUILD COMPLETO.${NC}"
+    echo -e "${YELLOW}Organizing ISO for deployment...${NC}"
+    
     mkdir -p "$ISO_DIR"
+    cp "$ISO_PATH" "$ISO_DIR/$FINAL_NAME"
     
-    cp "$ISO_PATH" "$ISO_DIR/zgate-vultr-x86_64.iso"
-    echo -e "${GREEN}✓ Copied: $ISO_DIR/zgate-vultr-x86_64.iso${NC}"
+    echo -e "${GREEN}✓ Artifact: $ISO_DIR/$FINAL_NAME${NC}"
+    echo -e "  Size: $(du -h "$ISO_DIR/$FINAL_NAME" | cut -f1)"
     
+    # Generar Checksum
     cd "$ISO_DIR"
-    sha256sum zgate-vultr-x86_64.iso > checksums.txt 2>/dev/null || shasum -a 256 zgate-vultr-x86_64.iso > checksums.txt
-    echo -e "${GREEN}✓ Generated: $ISO_DIR/checksums.txt${NC}"
+    sha256sum "$FINAL_NAME" > checksums.txt 2>/dev/null || shasum -a 256 "$FINAL_NAME" > checksums.txt
+    echo -e "${GREEN}✓ Checksum: $ISO_DIR/checksums.txt${NC}"
     
-    echo -e "\n${GREEN}ISOs ready for Brain at:${NC}"
-    ls -lh "$ISO_DIR"
 else
-    echo -e "${RED}[✘] Error: No se generó la ISO en $ISO_PATH.${NC}"
-    exit 1
+    # Si estábamos en modo clean, no es un error
+    if [ "$1" != "clean" ]; then
+        echo -e "${RED}[✘] Error Crítico: No se generó la ISO en $ISO_PATH.${NC}"
+        echo -e "${RED}    Revisa los logs anteriores.${NC}"
+        exit 1
+    fi
 fi

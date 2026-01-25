@@ -27,7 +27,7 @@ if [[ ! -f "$CHECKSUMS_FILE" ]]; then
     echo -e "${YELLOW}   Ubicación esperada: $CHECKSUMS_FILE${NC}"
     echo ""
     echo -e "${YELLOW}💡 Generar checksums con:${NC}"
-    echo -e "${YELLOW}   cd bin && sha256sum z-gate-agent-* > checksums.sha256${NC}"
+    echo -e "${YELLOW}   cd bin && sha256sum z-lag-agent-* > checksums.sha256${NC}"
     exit 1
 fi
 
@@ -46,6 +46,6 @@ else
     echo -e "${YELLOW}⚠️  ADVERTENCIA DE SEGURIDAD:${NC}"
     echo -e "${YELLOW}   - No uses estos binarios en producción${NC}"
     echo -e "${YELLOW}   - Descarga binarios limpios del repositorio privado${NC}"
-    echo -e "${YELLOW}   - Regenera checksums: sha256sum z-gate-agent-* > checksums.sha256${NC}"
+    echo -e "${YELLOW}   - Regenera checksums: sha256sum z-lag-agent-* > checksums.sha256${NC}"
     exit 1
 fi

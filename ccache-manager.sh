@@ -15,12 +15,12 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-VOLUME_NAME="zgate-ccache"
+VOLUME_NAME="zlag-ccache"
 
 show_help() {
     echo ""
     echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}  🚀 Z-GATE ccache Management                              ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  🚀 Z-Lag ccache Management                              ${CYAN}║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "${GREEN}Comandos disponibles:${NC}"

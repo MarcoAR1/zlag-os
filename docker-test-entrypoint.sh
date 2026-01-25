@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# 🚀 Docker Test Entrypoint - Z-Gate ISO Builder
+# 🚀 Docker Test Entrypoint - Z-Lag ISO Builder
 # ==============================================================================
 # Replica exactamente el proceso de GitHub Actions para builds locales
 # ==============================================================================
@@ -30,7 +30,7 @@ banner() {
     # clear solo si TERM está configurado
     [ -n "$TERM" ] && command -v clear >/dev/null 2>&1 && clear
     echo -e "${CYAN}====================================================================${NC}"
-    echo -e "${CYAN}  🐳 Z-GATE LOCAL BUILD TEST ENVIRONMENT${NC}"
+    echo -e "${CYAN}  🐳 Z-Lag LOCAL BUILD TEST ENVIRONMENT${NC}"
     echo -e "${CYAN}====================================================================${NC}"
     echo -e "${BLUE}Replicando GitHub Actions workflow localmente${NC}"
     echo -e "${CYAN}====================================================================${NC}"
@@ -44,7 +44,7 @@ verify_workspace() {
     if [ ! -d "/workspace/buildroot" ]; then
         echo -e "${RED}❌ Error: No se encuentra /workspace/buildroot${NC}"
         echo -e "${YELLOW}Asegúrate de montar el volumen correctamente:${NC}"
-        echo -e "${CYAN}docker run -v \$(pwd):/workspace zgate-builder:test${NC}"
+        echo -e "${CYAN}docker run -v \$(pwd):/workspace zlag-builder:test${NC}"
         exit 1
     fi
     
@@ -69,9 +69,9 @@ verify_agent_binaries() {
     local binary=""
     
     if [ "$arch" == "x86_64" ]; then
-        binary="/workspace/bin/z-gate-agent-x86_64"
+        binary="/workspace/bin/z-lag-agent-x86_64"
     elif [ "$arch" == "arm64" ]; then
-        binary="/workspace/bin/z-gate-agent-arm64"
+        binary="/workspace/bin/z-lag-agent-arm64"
     fi
     
     if [ ! -f "$binary" ]; then
@@ -84,17 +84,17 @@ verify_agent_binaries() {
     ls -lh "$binary"
     
     # Copiar al overlay de buildroot (igual que en GitHub Actions)
-    local overlay_dir="/workspace/buildroot/board/zgate/rootfs-overlay/usr/bin"
+    local overlay_dir="/workspace/buildroot/board/zlag/rootfs-overlay/usr/bin"
     mkdir -p "$overlay_dir"
     
     if [ "$arch" == "x86_64" ]; then
-        cp "$binary" "$overlay_dir/z-gate-agent"
-        chmod +x "$overlay_dir/z-gate-agent"
-        echo -e "${GREEN}✓ Copiado a overlay: $overlay_dir/z-gate-agent${NC}"
+        cp "$binary" "$overlay_dir/z-lag-agent"
+        chmod +x "$overlay_dir/z-lag-agent"
+        echo -e "${GREEN}✓ Copiado a overlay: $overlay_dir/z-lag-agent${NC}"
     else
-        cp "$binary" "$overlay_dir/z-gate-agent-arm64"
-        chmod +x "$overlay_dir/z-gate-agent-arm64"
-        echo -e "${GREEN}✓ Copiado a overlay: $overlay_dir/z-gate-agent-arm64${NC}"
+        cp "$binary" "$overlay_dir/z-lag-agent-arm64"
+        chmod +x "$overlay_dir/z-lag-agent-arm64"
+        echo -e "${GREEN}✓ Copiado a overlay: $overlay_dir/z-lag-agent-arm64${NC}"
     fi
     
     return 0
@@ -110,14 +110,14 @@ create_secrets_file() {
     
     # Usar valores mock si no existen variables de entorno
     cat > .secrets <<EOF
-export ZGATE_SECRET="${ZGATE_SECRET:-test-secret-12345}"
+export ZLAG_SECRET="${ZLAG_SECRET:-test-secret-12345}"
 EOF
     
     echo -e "${GREEN}✓ Archivo de secretos creado (valores mock para testing)${NC}"
     
     # Mostrar advertencia si son valores mock
-    if [ -z "$ZGATE_SECRET" ]; then
-        echo -e "${YELLOW}⚠️  Usando ZGATE_SECRET mock. Para producción, pasa -e ZGATE_SECRET=...${NC}"
+    if [ -z "$ZLAG_SECRET" ]; then
+        echo -e "${YELLOW}⚠️  Usando ZLAG_SECRET mock. Para producción, pasa -e ZLAG_SECRET=...${NC}"
     fi
 }
 
@@ -140,21 +140,21 @@ build_x86_64() {
     ./setup.sh update 2>&1 | tee /tmp/build-x86_64.log
     
     echo -e "${BLUE}[2/3] Calculando hash del ISO...${NC}"
-    if [ -f "isos/vultr-x86_64/zgate-vultr-x86_64.iso" ]; then
+    if [ -f "isos/vultr-x86_64/zlag-vultr-x86_64.iso" ]; then
         cd isos/vultr-x86_64
-        SHA256=$(sha256sum zgate-vultr-x86_64.iso | cut -d' ' -f1)
-        SIZE=$(du -h zgate-vultr-x86_64.iso | cut -f1)
+        SHA256=$(sha256sum zlag-vultr-x86_64.iso | cut -d' ' -f1)
+        SIZE=$(du -h zlag-vultr-x86_64.iso | cut -f1)
         
         echo -e "${GREEN}====================================================================${NC}"
         echo -e "${GREEN}✅ ISO x86_64 generado exitosamente!${NC}"
         echo -e "${GREEN}====================================================================${NC}"
-        echo -e "Archivo: zgate-vultr-x86_64.iso"
+        echo -e "Archivo: zlag-vultr-x86_64.iso"
         echo -e "Tamaño: ${SIZE}"
         echo -e "SHA256: ${SHA256}"
         echo -e "${GREEN}====================================================================${NC}"
         
         # Guardar checksums
-        echo "${SHA256}  zgate-vultr-x86_64.iso" > checksums.txt
+        echo "${SHA256}  zlag-vultr-x86_64.iso" > checksums.txt
         echo -e "${GREEN}✓ Checksums guardados en checksums.txt${NC}"
     else
         echo -e "${RED}❌ Error: ISO no generado en isos/vultr-x86_64/${NC}"
@@ -181,21 +181,21 @@ build_arm64() {
     ./setup_arm.sh update 2>&1 | tee /tmp/build-arm64.log
     
     echo -e "${BLUE}[2/3] Calculando hash de la imagen...${NC}"
-    if [ -f "isos/oracle-arm64/zgate-oracle-arm64.ext4" ]; then
+    if [ -f "isos/oracle-arm64/zlag-oracle-arm64.ext4" ]; then
         cd isos/oracle-arm64
-        SHA256=$(sha256sum zgate-oracle-arm64.ext4 | cut -d' ' -f1)
-        SIZE=$(du -h zgate-oracle-arm64.ext4 | cut -f1)
+        SHA256=$(sha256sum zlag-oracle-arm64.ext4 | cut -d' ' -f1)
+        SIZE=$(du -h zlag-oracle-arm64.ext4 | cut -f1)
         
         echo -e "${GREEN}====================================================================${NC}"
         echo -e "${GREEN}✅ Imagen ARM64 generada exitosamente!${NC}"
         echo -e "${GREEN}====================================================================${NC}"
-        echo -e "Archivo: zgate-oracle-arm64.ext4"
+        echo -e "Archivo: zlag-oracle-arm64.ext4"
         echo -e "Tamaño: ${SIZE}"
         echo -e "SHA256: ${SHA256}"
         echo -e "${GREEN}====================================================================${NC}"
         
         # Guardar checksums
-        echo "${SHA256}  zgate-oracle-arm64.ext4" > checksums.txt
+        echo "${SHA256}  zlag-oracle-arm64.ext4" > checksums.txt
         echo -e "${GREEN}✓ Checksums guardados en checksums.txt${NC}"
     else
         echo -e "${RED}❌ Error: Imagen no generada en isos/oracle-arm64/${NC}"
@@ -228,7 +228,7 @@ main() {
             ;;
         *)
             echo -e "${RED}❌ Target desconocido: $BUILD_TARGET${NC}"
-            echo -e "${YELLOW}Uso: docker run ... zgate-builder:test [x86_64|arm64|both]${NC}"
+            echo -e "${YELLOW}Uso: docker run ... zlag-builder:test [x86_64|arm64|both]${NC}"
             exit 1
             ;;
     esac
@@ -240,10 +240,10 @@ main() {
     echo ""
     echo -e "${CYAN}Archivos generados en:${NC}"
     if [ "$BUILD_TARGET" == "x86_64" ] || [ "$BUILD_TARGET" == "both" ]; then
-        echo -e "  • buildroot/isos/vultr-x86_64/zgate-vultr-x86_64.iso"
+        echo -e "  • buildroot/isos/vultr-x86_64/zlag-vultr-x86_64.iso"
     fi
     if [ "$BUILD_TARGET" == "arm64" ] || [ "$BUILD_TARGET" == "both" ]; then
-        echo -e "  • buildroot/isos/oracle-arm64/zgate-oracle-arm64.ext4"
+        echo -e "  • buildroot/isos/oracle-arm64/zlag-oracle-arm64.ext4"
     fi
     echo ""
 }
