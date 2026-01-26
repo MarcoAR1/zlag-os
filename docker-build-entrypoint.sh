@@ -1,118 +1,107 @@
 #!/bin/bash
 # ==============================================================================
-# 🚀 zlag OS - Smart Cache Injection Entrypoint
+# 🚀 zlag OS - Smart Cache Injection Entrypoint (Production Ready)
 # ==============================================================================
 # Este script se ejecuta dentro del contenedor pre-compilado.
-# 1. Recibe el binario compilado de Go (desde el volumen montado).
+# 1. Recibe el binario de Go (vía volumen montado).
 # 2. Lo inyecta en el overlay del sistema de archivos.
-# 3. Fuerza a Buildroot a re-empaquetar la ISO/Imagen sin recompilar el Kernel.
+# 3. Fuerza a Buildroot a re-empaquetar la ISO/Imagen en segundos.
 # ==============================================================================
 
 set -e
 
-# Colores
+# Colores para un log profesional en GitHub Actions
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# La arquitectura viene definida por el Dockerfile (ENV TARGET_ARCH)
-ARCH=${TARGET_ARCH:-"unknown"}
+# La arquitectura viene del Dockerfile (ENV ZLAG_ARCH)
+ARCH=${ZLAG_ARCH:-"unknown"}
 
 banner() {
     echo -e "${BLUE}============================================================${NC}"
-    echo -e "${BLUE} 🚀 ZLAG OS BUILDER | Arch: ${YELLOW}${ARCH}${NC}"
+    echo -e "${BLUE} 🏗️  ZLAG OS FINAL ASSEMBLER | Arch: ${YELLOW}${ARCH}${NC}"
     echo -e "${BLUE}============================================================${NC}"
 }
 
 sync_agent() {
     echo -e "${BLUE}[1/3] 📦 Inyectando binario del Agente...${NC}"
     
-    # Ruta en el volumen montado por GitHub Actions
-    SOURCE_BIN="/workspace/bin/z-lag-agent-${ARCH}"
+    # RUTA ORIGEN: Mapeada por el Workflow
+    # El archivo viene directamente montado en /zlag/bin/z-lag-agent
+    SOURCE_BIN="/zlag/bin/z-lag-agent"
     
-    # --- CORRECCIÓN CRÍTICA: zlag -> zlag ---
-    DEST_DIR="board/zlag/rootfs-overlay/usr/bin"
+    # RUTA DESTINO: Overlay de Buildroot dentro del contenedor
+    DEST_DIR="/zlag/board/zlag/rootfs-overlay/usr/bin"
     DEST_BIN="${DEST_DIR}/z-lag-agent"
 
-    # Verificar origen (Binario de Go)
+    # Verificar si el volumen se montó correctamente
     if [[ ! -f "$SOURCE_BIN" ]]; then
-        echo -e "${RED}❌ Error: No se encuentra el binario en: $SOURCE_BIN${NC}"
-        echo -e "${YELLOW}   Asegúrate de que el Job 'build-agent' generó el nombre correcto.${NC}"
-        echo -e "${YELLOW}   Contenido de /workspace/bin/:${NC}"
-        ls -l /workspace/bin/ 2>/dev/null || echo "   (Directorio vacío o no montado)"
+        echo -e "${RED}❌ Error: No se encontró el binario en $SOURCE_BIN${NC}"
+        echo -e "${YELLOW}Asegúrate de que el volumen esté bien mapeado en el docker run.${NC}"
         exit 1
     fi
 
-    # Verificar destino (Overlay de Buildroot)
-    if [[ ! -d "$DEST_DIR" ]]; then
-        echo -e "${YELLOW}⚠ El directorio de destino no existía, creándolo: $DEST_DIR${NC}"
-        mkdir -p "$DEST_DIR"
-    fi
+    # Asegurar existencia del directorio en el overlay
+    mkdir -p "$DEST_DIR"
 
-    # Copiar y dar permisos
-    cp "$SOURCE_BIN" "$DEST_BIN"
+    # Copiar con preservación de atributos y dar permisos de ejecución
+    cp -p "$SOURCE_BIN" "$DEST_BIN"
     chmod +x "$DEST_BIN"
-    echo -e "${GREEN}   ✓ Agente ($ARCH) inyectado exitosamente.${NC}"
+    
+    echo -e "${GREEN}   ✓ Agente inyectado correctamente en el overlay.${NC}"
 }
 
 force_rootfs_rebuild() {
-    echo -e "${BLUE}[2/3] 🧹 Limpiando sellos de RootFS...${NC}"
+    echo -e "${BLUE}[2/3] 🧹 Limpiando caché de imágenes previas...${NC}"
     
-    # 1. Borramos la versión anterior del agente en el 'target' (sistema de archivos temporal)
-    rm -rf output/target/usr/bin/z-lag-agent
+    # Eliminamos el binario antiguo en el target real para forzar la copia del nuevo overlay
+    rm -f /zlag/output/target/usr/bin/z-lag-agent
 
-    # 2. Borramos los sellos (.stamp) para obligar a Buildroot a volver a copiar el overlay
-    #    y re-generar las imágenes finales.
-    #    NOTA: No borramos los objetos del Kernel, solo los indicadores de "finalizado".
+    # Borramos los archivos de imagen previos para que 'make' los genere de nuevo
+    # Esto no borra la compilación del kernel, solo el empaquetado final.
+    rm -f /zlag/output/images/rootfs.*
+    rm -f /zlag/output/images/*.iso
+    rm -f /zlag/output/images/*.ext4
+    rm -f /zlag/output/images/*.tar.gz
     
-    # Forzar paso de ensamblaje de target
-    rm -f output/build/.rootfs_build_start_time
+    # Eliminamos sellos de control de Buildroot para el paso de target y post-build
+    find /zlag/output/build -name ".stamp_target_installed" -delete
+    find /zlag/output/build -name ".stamp_images_installed" -delete
     
-    # Forzar generación de imágenes de sistema de archivos (ext4, iso, cpio)
-    rm -f output/images/rootfs.*
-    rm -f output/images/*.iso
-    rm -f output/images/*.tar.gz
-    
-    # Opcional: Si el kernel necesita ser re-copiado a output/images
-    # rm -f output/images/Image output/images/bzImage 
-    
-    echo -e "${GREEN}   ✓ Limpieza lista para re-empaquetado rápido.${NC}"
+    echo -e "${GREEN}   ✓ Sistema listo para re-empaquetado rápido.${NC}"
 }
 
 run_make() {
-    echo -e "${BLUE}[3/3] 🔨 Generando Imagen Final...${NC}"
+    echo -e "${BLUE}[3/3] 🔨 Generando empaquetado final...${NC}"
     
-    # Al ejecutar make, Buildroot detectará que faltan las imágenes finales
-    # y las regenerará usando el nuevo overlay.
+    # Ejecutamos make dentro de /zlag
+    # Al estar todo pre-compilado, esto tardará ~30-60 segundos
     if make; then
         echo -e "${GREEN}============================================================${NC}"
-        echo -e "${GREEN} ✅ BUILD EXITOSO${NC}"
-        echo -e "${GREEN}    Archivos generados en output/images/:${NC}"
+        echo -e "${GREEN} ✅ ENSAMBLAJE COMPLETADO CON ÉXITO${NC}"
         echo -e "${GREEN}============================================================${NC}"
         
-        # Mostrar resultados con tamaño para log de CI
-        cd output/images
-        ls -lh | grep -E "\.(iso|img|ext4|tar\.gz)$" || ls -lh
+        # Listar resultados para el log de GitHub
+        ls -lh /zlag/output/images/ | grep -E "\.(iso|ext4|tar\.gz)$"
     else
-        echo -e "${RED}❌ Error durante el ensamblaje final.${NC}"
+        echo -e "${RED}❌ Error: Falló el comando 'make' durante el empaquetado.${NC}"
         exit 1
     fi
 }
 
-# ==============================================================================
-# Lógica Principal
-# ==============================================================================
+# --- EJECUCIÓN ---
 
 banner
 
-# Si pasamos argumentos al docker run, ejecutamos eso (modo debug manual)
+# Si se pasan argumentos extras al contenedor (ej: /bin/bash), se ejecutan y el script frena.
 if [[ "$#" -gt 0 ]]; then
+    echo -e "${YELLOW} entrando en modo manual...${NC}"
     exec "$@"
 fi
 
-# Modo Automático
 sync_agent
 force_rootfs_rebuild
 run_make

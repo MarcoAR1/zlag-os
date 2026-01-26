@@ -5,43 +5,16 @@ on:
     branches: [ main ]
     paths:
       - 'buildroot/**'
+      - 'bin/**' # <--- Ahora reacciona si actualizas los binarios manualmente
       - '.github/workflows/build-iso.yml'
   workflow_dispatch:
-  repository_dispatch:
-    types: [build-isos]
 
 jobs:
-  # --------------------------------------------------------------------------
-  # 1. Compilar Agente (Go) - Rápido y necesario para inyectar
-  # --------------------------------------------------------------------------
-  build-agent:
-    name: Build Go Agent
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-          
-      - name: Build Binaries
-        run: |
-          mkdir -p bin
-          GOOS=linux GOARCH=amd64 go build -o bin/z-lag-agent-x86_64 ./cmd/agent 
-          GOOS=linux GOARCH=arm64 go build -o bin/z-lag-agent-arm64 ./cmd/agent
-
-      - name: Upload Binaries
-        uses: actions/upload-artifact@v4
-        with:
-          name: agent-binaries
-          path: bin/
-          retention-days: 1
-
-  # --------------------------------------------------------------------------
-  # 2. Ensamblaje Final (Usando los Dockers del Workflow 1)
-  # --------------------------------------------------------------------------
+  # ==============================================================================
+  # Job Único: Ensamblaje Final (Inyección y Generación)
+  # ==============================================================================
   assemble:
     name: Assemble ISO/Image
-    needs: build-agent
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -52,22 +25,25 @@ jobs:
         include:
           - arch: x86_64
             artifact_name: zlag-vultr-x86_64
+            binary_path: bin/z-lag-agent-x86_64
             ext: iso
           - arch: arm64
             artifact_name: zlag-oracle-arm64
+            binary_path: bin/z-lag-agent-arm64
             ext: ext4
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Download Agent Binaries
-        uses: actions/download-artifact@v4
-        with:
-          name: agent-binaries
-          path: bin
+      - name: Verify Binaries
+        run: |
+          if [ ! -f "${{ matrix.binary_path }}" ]; then
+            echo "❌ Error: No se encuentra el binario en ${{ matrix.binary_path }}"
+            exit 1
+          fi
 
-      - name: Calculate Config Hash (Para matchear el Docker correcto)
+      - name: Calculate Config Hash
         id: config-hash
         run: |
           HASH=$(find buildroot/scripts buildroot/configs buildroot/board -type f -print0 | sort -z | xargs -0 cat | sha256sum | head -c 16)
@@ -87,11 +63,12 @@ jobs:
           
           mkdir -p output/images
           
-          echo "🚀 Ensamblando ${{ matrix.arch }} con imagen $IMG"
+          echo "🚀 Ensamblando ${{ matrix.arch }} usando imagen: $IMG"
           
-          # Corremos el contenedor compilador mapeando nuestros binarios locales
+          # Mapeamos el binario específico de la arquitectura al contenedor
+          # El contenedor lo espera en /zlag/bin/z-lag-agent (nombre genérico)
           docker run --rm \
-            -v $(pwd)/bin:/zlag/bin:ro \
+            -v $(pwd)/${{ matrix.binary_path }}:/zlag/bin/z-lag-agent:ro \
             -v $(pwd)/output/images:/zlag/output/images \
             -e ZLAG_SECRET="${{ secrets.ZLAG_SECRET }}" \
             $IMG
@@ -104,7 +81,6 @@ jobs:
           SIZE=$(du -h $FILE | cut -f1)
           echo "sha256=$SHA" >> $GITHUB_OUTPUT
           echo "size=$SIZE" >> $GITHUB_OUTPUT
-          echo "file_path=$FILE" >> $GITHUB_OUTPUT
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -112,15 +88,9 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: output/images/
 
-    outputs:
-      # Exponemos los datos para el Job de Release
-      x86_sha: ${{ steps.meta.outputs.sha256 && matrix.arch == 'x86_64' || '' }}
-      arm_sha: ${{ steps.meta.outputs.sha256 && matrix.arch == 'arm64' || '' }}
-      # Nota: Para simplificar el Release, usaremos archivos de texto generados en el job
-
-  # --------------------------------------------------------------------------
-  # 3. Release Automático
-  # --------------------------------------------------------------------------
+  # ==============================================================================
+  # Job: Release (Solo si estás en main)
+  # ==============================================================================
   create-release:
     needs: assemble
     runs-on: ubuntu-latest
@@ -137,11 +107,11 @@ jobs:
           tag_name: iso-${{ github.run_number }}
           name: "Z-Lag Production Build #${{ github.run_number }}"
           body: |
-            ## 🚀 Z-Lag OS Release
-            Imágenes listas para despliegue.
+            ## 🚀 Z-Lag OS Release (Build #${{ github.run_number }})
             
-            ### 📦 checksums
-            Verificar integridad con los archivos adjuntos.
+            ### 📦 Descargas
+            - **x86_64:** ISO para Vultr/Generic
+            - **ARM64:** EXT4 para Oracle Cloud
           files: |
             ./artifacts/zlag-vultr-x86_64/*
             ./artifacts/zlag-oracle-arm64/*
