@@ -45,6 +45,7 @@ source scripts/02_config_arm.sh
 if [ -f "scripts/03_agent_install.sh" ]; then
     source scripts/03_agent_install.sh
 else
+    # Mock function si el script no existe (para evitar crash en bootstapping)
     install_prebuilt_agent() { echo -e "${YELLOW}[!] Agent installer script missing, skipping injection.${NC}"; }
 fi
 
@@ -61,10 +62,12 @@ header() {
 }
 
 # Lógica de Make (ARM64)
-# NOTA: Eliminamos O=... porque en Docker containerizado ya estamos aislados
 run_full_build() {
     echo -e "${RED}[☢️] LIMPIEZA NUCLEAR DE KERNEL ARM64...${NC}"
-    rm -rf output/build/linux-* rm -f output/build/.fragments_list
+    
+    # Comandos separados correctamente para evitar errores de sintaxis
+    rm -rf output/build/linux-*
+    rm -f output/build/.fragments_list
     rm -f output/images/Image
 
     echo -e "${BLUE}[🛠️] Configurando Buildroot ARM64...${NC}"
@@ -102,10 +105,12 @@ if [ "$1" == "build" ]; then
     
     # INSTALACIÓN AGENTE (OPCIONAL EN BUILD)
     # Vital para el Docker Cache: Si no hay binario, no fallamos.
+    # Buscamos bin/z-lag-agent-arm64
     if [ -f "bin/z-lag-agent-arm64" ]; then
         install_prebuilt_agent "arm64"
     else
-        echo -e "${YELLOW}[!] Agente binario no encontrado. Continuando solo con compilación de Kernel.${NC}"
+        echo -e "${YELLOW}[!] Agente binario (bin/z-lag-agent-arm64) no encontrado.${NC}"
+        echo -e "${YELLOW}    Continuando solo con compilación de Kernel.${NC}"
     fi
     
     run_full_build
@@ -159,6 +164,7 @@ if [ -f "$EXT4_PATH" ] || [ -f "$TAR_PATH" ]; then
     echo -e "${GREEN}  ✓ Checksum: $ISO_DIR/checksums.txt${NC}"
 
 else
+    # Si estábamos en modo clean, no es un error
     if [ "$1" != "clean" ]; then
         echo -e "\n${RED}[✘] Build failed! Check errors above.${NC}"
         exit 1

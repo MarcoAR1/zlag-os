@@ -1,78 +1,35 @@
 #!/bin/bash
-# scripts/02_config_arm.sh - ARM64 Configuration Module
+# scripts/02_config_arm.sh
 
 set -euo pipefail
 
 configure_system_arm() {
-    echo -e "${BLUE}[⚙️] Generando configuración ARM64 para Oracle Cloud...${NC}"
+    echo -e "${BLUE}[⚙️] Generando configuración ARM64 (Standalone)...${NC}"
     mkdir -p board/zlag
+    mkdir -p board/zlag/rootfs-overlay
 
-    # 1. CREAR CONFIGURACIÓN ARM64 DESDE BASE X86_64
-    if [ -f "configs/zlag_defconfig" ]; then
-        echo -e "${YELLOW}  → Copiando configuración base...${NC}"
-        cp configs/zlag_defconfig configs/zlag_arm64_defconfig
-        
-        # Eliminar configuraciones x86_64 incompatibles
-        sed -i '/^BR2_x86_64=y/d' configs/zlag_arm64_defconfig
-        sed -i '/^BR2_TARGET_GRUB2_PC=y/d' configs/zlag_arm64_defconfig
-        sed -i '/^BR2_TARGET_GRUB2_BOOT_PARTITION=/d' configs/zlag_arm64_defconfig
-        sed -i '/^BR2_TARGET_GRUB2_BUILTIN_CONFIG_PC=/d' configs/zlag_arm64_defconfig
-        sed -i '/^BR2_TARGET_GRUB2_BUILTIN_MODULES_PC=/d' configs/zlag_arm64_defconfig
-        sed -i '/^BR2_TARGET_ROOTFS_ISO9660/d' configs/zlag_arm64_defconfig
-        
-        # Insertar Configuración ARM64 al inicio
-        sed -i '1i\
-# ============================================================================\
-# ARM64 (aarch64) Architecture Configuration for Oracle Cloud\
-# ============================================================================\
-BR2_aarch64=y\
-BR2_cortex_a72=y
-' configs/zlag_arm64_defconfig
-        
-        # Añadir configuraciones específicas ARM64 al final
-        cat >> configs/zlag_arm64_defconfig << 'EOF'
+    # ==========================================================================
+    # 1. CONFIGURACIÓN DEL KERNEL ARM64 (Equivalente exacto a x86)
+    # ==========================================================================
+    cat <<EOF > board/zlag/linux_arm64.config
+# --- BUILD FIX ---
+# CONFIG_OBJTOOL is not set
+# CONFIG_UNWINDER_ORC is not set
 
-# ============================================================================
-# ARM64-Specific Toolchain and Kernel
-# ============================================================================
-BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="board/zlag/linux_arm64.config"
-BR2_ROOTFS_POST_BUILD_SCRIPT="board/zlag/post_build_arm64.sh"
-
-# --- COMPRESSION ---
-BR2_TARGET_ROOTFS_SQUASHFS=y
-BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
-BR2_TARGET_ROOTFS_SQUASHFS4_XZ_EXTREME=y
-
-# Target filesystem for Oracle Cloud (EXT4 + TAR.GZ)
-BR2_TARGET_ROOTFS_EXT2=y
-BR2_TARGET_ROOTFS_EXT2_4=y
-BR2_TARGET_ROOTFS_TAR_GZIP=y
-
-# Boot configuration for Oracle Cloud (UEFI ARM64)
-BR2_TARGET_GRUB2_ARM64_EFI=y
-EOF
-        echo -e "${GREEN}  ✓ ARM64 config created: configs/zlag_arm64_defconfig${NC}"
-    else
-        echo -e "${RED}ERROR: configs/zlag_defconfig not found${NC}"
-        exit 1
-    fi
-
-    # 2. CONFIGURACIÓN DE KERNEL ARM64 (FULL ARMOR + LOGGING + INGRESS)
-    # Sincronizado 100% con la versión x86
-    echo -e "${YELLOW}  → Generando linux_arm64.config...${NC}"
-    cat > board/zlag/linux_arm64.config << 'EOF'
-# Linux Kernel Configuration for ARM64 (Oracle Cloud Ampere A1)
+# --- ARCHITECTURE ---
 CONFIG_ARM64=y
 CONFIG_64BIT=y
 CONFIG_UNWINDER_FRAME_POINTER=y
-
-# --- VIRTUALIZATION ---
 CONFIG_ARCH_VIRT=y
+
+# --- VIRTUALIZATION (Oracle/QEMU) ---
 CONFIG_VIRTIO=y
 CONFIG_VIRTIO_PCI=y
 CONFIG_VIRTIO_NET=y
 CONFIG_VIRTIO_BLK=y
 CONFIG_VIRTIO_MMIO=y
+CONFIG_PCI=y
+CONFIG_PCI_MSI=y
 
 # --- NETWORKING ---
 CONFIG_NET=y
@@ -84,16 +41,16 @@ CONFIG_IP_ADVANCED_ROUTER=y
 CONFIG_IP_MULTIPLE_TABLES=y
 CONFIG_NET_SCHED=y
 
-# --- FIREWALL CORE ---
+# --- FIREWALL CORE (NETFILTER) ---
 CONFIG_NETFILTER=y
 CONFIG_NETFILTER_ADVANCED=y
-CONFIG_NETFILTER_INGRESS=y       # <--- CRÍTICO: Habilita hook ingress
+CONFIG_NETFILTER_INGRESS=y
 CONFIG_NETFILTER_NETLINK_GLUE_CT=y
 CONFIG_NF_CONNTRACK=y
 CONFIG_NF_LOG_COMMON=y
 CONFIG_NETFILTER_XTABLES=y
 
-# --- LOGGING BACKENDS (CRÍTICO: FIX ERROR 'log prefix') ---
+# --- LOGGING BACKENDS ---
 CONFIG_NF_LOG_SYSLOG=y
 CONFIG_NF_LOG_IPV4=y
 CONFIG_NF_LOG_IPV6=y
@@ -113,7 +70,7 @@ CONFIG_NFT_CT=y
 CONFIG_NFT_RBTREE=y
 CONFIG_NFT_HASH=y
 CONFIG_NFT_COUNTER=y
-CONFIG_NFT_LOG=y               # Frontend de log
+CONFIG_NFT_LOG=y
 CONFIG_NFT_LIMIT=y
 CONFIG_NFT_MASQ=y
 CONFIG_NFT_NAT=y
@@ -135,10 +92,10 @@ CONFIG_NF_FLOW_TABLE=y
 CONFIG_NF_FLOW_TABLE_INET=y
 CONFIG_NF_FLOW_TABLE_IPV4=y
 CONFIG_NF_FLOW_TABLE_IPV6=y
-CONFIG_NFT_FLOW_OFFLOAD=y        # <--- Conecta NFT con Flowtable
+CONFIG_NFT_FLOW_OFFLOAD=y
 
 # --- TRAFFIC CONTROL (QoS & INGRESS) ---
-CONFIG_NET_CLS_ACT=y             # Requerido para hooks ingress complejos
+CONFIG_NET_CLS_ACT=y
 CONFIG_NET_SCH_INGRESS=y
 
 # --- NAT ---
@@ -153,7 +110,7 @@ CONFIG_STACKPROTECTOR=y
 CONFIG_STACKPROTECTOR_STRONG=y
 CONFIG_STRICT_KERNEL_RWX=y
 
-# --- WIREGUARD ---
+# --- VPN & TUNNELING ---
 CONFIG_WIREGUARD=y
 
 # --- NETWORK PERFORMANCE ---
@@ -168,50 +125,97 @@ CONFIG_BPF_JIT=y
 CONFIG_EXT4_FS=y
 CONFIG_TMPFS=y
 EOF
-    echo -e "${GREEN}  ✓ linux_arm64.config creado${NC}"
 
-    # 3. POST-BUILD SCRIPT ARM64 (Optimizado y Dinámico)
-    echo -e "${YELLOW}  → Generando post_build_arm64.sh...${NC}"
-    cat > board/zlag/post_build_arm64.sh << 'POSTEOF'
+    # ==========================================================================
+    # 2. CONFIGURACIÓN BUILDROOT (zlag_arm64_defconfig)
+    # ==========================================================================
+    cat <<EOF > configs/zlag_arm64_defconfig
+BR2_aarch64=y
+BR2_cortex_a72=y
+BR2_CCACHE=y
+BR2_CCACHE_DIR="/buildroot/dl/ccache"
+BR2_CCACHE_USE_BASEDIR=y
+BR2_JLEVEL=0
+BR2_TOOLCHAIN_BUILDROOT=y
+BR2_TOOLCHAIN_BUILDROOT_UCLIBC=y
+BR2_KERNEL_HEADERS_6_1=y
+BR2_TOOLCHAIN_BUILDROOT_WCHAR=y
+BR2_TOOLCHAIN_BUILDROOT_CXX=y
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_VERSION=y
+BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE="6.1.100"
+BR2_LINUX_KERNEL_USE_ARCH_DEFAULT_CONFIG=y
+BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="board/zlag/linux_arm64.config"
+BR2_LINUX_KERNEL_NEEDS_HOST_LIBELF=n
+BR2_LINUX_KERNEL_NEEDS_HOST_OPENSSL=n
+BR2_LINUX_KERNEL_IMAGE_TARGET_NAME="Image"
+BR2_PACKAGE_LIBNFTNL=y
+BR2_PACKAGE_NFTABLES=y
+BR2_PACKAGE_WIREGUARD_TOOLS=y
+BR2_PACKAGE_IPROUTE2=y
+BR2_PACKAGE_BASH=y
+BR2_PACKAGE_ELFUTILS=y
+BR2_PACKAGE_LLVM=y
+BR2_PACKAGE_CLANG=y
+BR2_TARGET_GENERIC_HOSTNAME="ZLag-Oracle-ARM"
+BR2_TARGET_GENERIC_ISSUE="Welcome to ZLag (ARM64)"
+BR2_ROOTFS_OVERLAY="board/zlag/rootfs-overlay"
+BR2_ROOTFS_POST_BUILD_SCRIPT="board/zlag/post_build_arm64.sh"
+BR2_TARGET_ROOTFS_CPIO=y
+BR2_TARGET_ROOTFS_CPIO_GZIP=y
+BR2_TARGET_ROOTFS_SQUASHFS=y
+BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
+BR2_TARGET_ROOTFS_SQUASHFS4_XZ_EXTREME=y
+BR2_TARGET_ROOTFS_TAR_GZIP=y
+BR2_TARGET_GRUB2=y
+BR2_TARGET_GRUB2_ARM64_EFI=y
+BR2_TARGET_GRUB2_BOOT_PARTITION="eltorito"
+BR2_TARGET_GRUB2_BUILTIN_CONFIG_PC="board/zlag/grub-pre.cfg"
+BR2_TARGET_GRUB2_BUILTIN_MODULES_PC="boot linux ext2 fat part_msdos part_gpt normal iso9660 search search_fs_file echo test configfile"
+EOF
+
+    # ==========================================================================
+    # 3. SCRIPTS DE SOPORTE (POST-BUILD & INIT)
+    # ==========================================================================
+    cat <<'EOF' > board/zlag/post_build_arm64.sh
 #!/bin/bash
-# Post-build script for ARM64 (Oracle Cloud)
+set -e
 TARGET_DIR=$1
-BOARD_DIR=$(dirname $0)
 
-# === LIMPIEZA TOTAL DE INIT SCRIPTS ===
+rm -rf ${TARGET_DIR}/var/run
+ln -snf ../run ${TARGET_DIR}/var/run
+mkdir -p ${TARGET_DIR}/boot/grub ${TARGET_DIR}/usr/bin ${TARGET_DIR}/sbin
+cp board/zlag/menu.cfg ${TARGET_DIR}/boot/grub/grub.cfg
+
+# === LIMPIEZA DE INIT ===
 echo "🧹 Limpiando scripts init default..."
 rm -f ${TARGET_DIR}/etc/init.d/S*
 
-# Instalar GRUB Config (Esto faltaba en versiones anteriores)
-mkdir -p ${TARGET_DIR}/boot/grub
-cp board/zlag/menu.cfg ${TARGET_DIR}/boot/grub/grub.cfg
-
 # Generar /init
-cat > $TARGET_DIR/init << 'INITEOF'
+cat > ${TARGET_DIR}/init << 'INITEOF'
 #!/bin/sh
 export PATH=/sbin:/usr/sbin:/bin:/usr/bin
 
-# Mount virtual filesystems
-mount -t proc none /proc
-mount -t sysfs none /sys
-mount -t devtmpfs none /dev
-mount -t tmpfs tmpfs /run
+/bin/mount -t proc proc /proc
+/bin/mount -t sysfs sysfs /sys
+/bin/mount -t devtmpfs devtmpfs /dev
+/bin/mount -t tmpfs tmpfs /run
 mkdir -p /run/lock /run/log /tmp /usr/share/udhcpc
 chmod 1777 /tmp
 
 echo "--- 🚀 Z-Lag OS STARTED (ARM64) ---"
 INITEOF
 
-cat >> $TARGET_DIR/init << 'INITEOF2'
+cat >> ${TARGET_DIR}/init <<'INITEOF2'
 
 echo "⚡ Iniciando configuración de red..."
 
-# 1. Loopback (Silenciando error)
-ip link set lo up
-ip addr add 127.0.0.1/8 dev lo 2>/dev/null || true
+# 1. Loopback
+/sbin/ip link set lo up
+/sbin/ip addr add 127.0.0.1/8 dev lo 2>/dev/null || true
 
-# 2. CÁLCULO DINÁMICO DE RECURSOS (ARM64)
-# Ampere A1 suele tener 1 hilo por core
+# 2. CÁLCULO DINÁMICO DE RECURSOS (CPU)
+# Ampere A1 (Oracle) suele tener 1 hilo por core
 CPU_COUNT=$(grep -c processor /proc/cpuinfo)
 LAST_CPU=$((CPU_COUNT - 1))
 MASK_DEC=$(( (1 << CPU_COUNT) - 1 ))
@@ -220,7 +224,7 @@ MASK_HEX=$(printf "%x" $MASK_DEC)
 echo "ℹ️ Hardware detectado: $CPU_COUNT CPUs (Máscara RPS: $MASK_HEX)"
 
 # 3. AUTODETECCIÓN DE INTERFAZ WAN
-echo "⏳ Detectando interfaz WAN..."
+echo "⏳ Detectando interfaz principal..."
 count=0
 IFACE=""
 
@@ -235,17 +239,17 @@ done
 
 if [ -n "$IFACE" ]; then
     echo "✅ Interfaz Física Detectada: $IFACE"
-    ip link set $IFACE up
+    /sbin/ip link set $IFACE up
 
-    # DHCP (Crítico para OCI)
+    # SOLICITAR IP VÍA DHCP (Crítico en Oracle Cloud)
     echo "🌐 Solicitando IP vía DHCP en $IFACE..."
-    udhcpc -b -i $IFACE -s /usr/share/udhcpc/default.script >/dev/null 2>&1 &
+    /sbin/udhcpc -b -i $IFACE -s /usr/share/udhcpc/default.script >/dev/null 2>&1 &
 
     # === FIX RACE CONDITION: ESPERAR A LA RED ===
     echo "⏳ Esperando concesión DHCP..."
     dhcp_wait=0
     has_ip=0
-    while [ $dhcp_wait -lt 100 ]; do # Timeout ~10 segundos
+    while [ $dhcp_wait -lt 100 ]; do # 10 segundos timeout
         if ip route | grep -q "default"; then
             has_ip=1
             break
@@ -258,7 +262,6 @@ if [ -n "$IFACE" ]; then
         echo "✅ Red Configurada."
         
         # === FIX: PRE-CARGAR TABLAS NFTABLES ===
-        # Vital: El agente asume que 'inet filter' existe.
         echo "🛡️ Inicializando firewall base..."
         nft add table inet filter
         nft add chain inet filter input { type filter hook input priority 0 \; policy accept \; }
@@ -268,11 +271,12 @@ if [ -n "$IFACE" ]; then
         
         export WAN_IFACE="$IFACE"
     else
-        echo "⚠️ Timeout DHCP."
+        echo "⚠️ Timeout esperando DHCP."
     fi
 
     # C. OPTIMIZACIONES GAMING
     echo 50 > /proc/sys/net/core/busy_poll
+    echo 50 > /proc/sys/net/core/busy_read
     echo 300000 > /proc/sys/net/core/netdev_max_backlog
     ethtool -C $IFACE rx-usecs 10 rx-frames 4 2>/dev/null || true
     ethtool -G $IFACE rx 4096 tx 4096 2>/dev/null || true
@@ -285,7 +289,7 @@ if [ -n "$IFACE" ]; then
         echo "0-$LAST_CPU" > /proc/irq/$irq/smp_affinity_list 2>/dev/null || true
     done
 
-    # RPS Dinámico
+    # RPS
     if [ -d "/sys/class/net/$IFACE/queues" ]; then
         for rps in /sys/class/net/$IFACE/queues/rx-*/rps_cpus; do
             [ -f "$rps" ] && echo "$MASK_HEX" > "$rps" 2>/dev/null || true
@@ -296,7 +300,7 @@ else
     echo "⚠️ ADVERTENCIA: No se detectó interfaz física."
 fi
 
-# 4. TEST NFTABLES (DEBUG)
+# === TEST NFTABLES KERNEL SUPPORT ===
 echo "🧪 Testeando soporte Kernel NFTables..."
 if nft list ruleset > /dev/null 2>&1; then
     echo "✅ Kernel NFTables: OK"
@@ -304,21 +308,22 @@ else
     echo "❌ Kernel NFTables: FALLO"
 fi
 
-# 5. INICIO DEL AGENTE Z-Lag
+# === INICIO DEL AGENTE Z-Lag ===
 echo "🚀 Iniciando Z-Lag Agent (ARM64)..."
 if [ -f "/usr/bin/z-lag-agent" ]; then
     /usr/bin/z-lag-agent &
 else
-    echo "❌ Error: Binario z-lag-agent no encontrado."
+    echo "❌ Error: Binario z-lag-agent no encontrado"
 fi
 
 exec /sbin/init
 INITEOF2
 
-chmod +x $TARGET_DIR/init
+chmod 755 ${TARGET_DIR}/init
 
-# Configurar script DHCP
-cat > $TARGET_DIR/usr/share/udhcpc/default.script << 'DHCPEOF'
+# SCRIPT DHCP
+mkdir -p ${TARGET_DIR}/usr/share/udhcpc
+cat > ${TARGET_DIR}/usr/share/udhcpc/default.script << 'DHCPEOF'
 #!/bin/sh
 [ -z "$1" ] && echo "Error: should be called from udhcpc" && exit 1
 case "$1" in
@@ -343,22 +348,25 @@ case "$1" in
 esac
 exit 0
 DHCPEOF
-chmod +x $TARGET_DIR/usr/share/udhcpc/default.script
+chmod +x ${TARGET_DIR}/usr/share/udhcpc/default.script
 
-# Configurar hostname
-echo "zlag-oracle-arm64" > $TARGET_DIR/etc/hostname
-
-echo "✓ Post-build ARM64 completed"
-POSTEOF
-
+# Permisos y Hostname
+[ -f "${TARGET_DIR}/usr/bin/z-lag-agent" ] && chmod +x ${TARGET_DIR}/usr/bin/z-lag-agent
+echo "zlag-oracle-arm64" > ${TARGET_DIR}/etc/hostname
+echo "✓ Post-build ARM64 completado"
+EOF
     chmod +x board/zlag/post_build_arm64.sh
 
-    # ==================================================================
-    # 4. GRUB CONFIG (ARM64 EFI)
-    # ==================================================================
-    # Nota: ttyAMA0 es para Oracle Cloud (Ampere)
-    # Nota: 'Image' es el nombre estándar del kernel ARM64 en Buildroot
-    mkdir -p board/zlag
+    # ==========================================================================
+    # 4. GRUB CONFIGS
+    # ==========================================================================
+    cat <<EOF > board/zlag/grub-pre.cfg
+set root=(cd)
+set prefix=(cd)/boot/grub
+configfile /boot/grub/grub.cfg
+EOF
+
+    # NOTA IMPORTANTE: En ARM64 (Oracle Cloud), la consola serial suele ser ttyAMA0
     cat <<EOF > board/zlag/menu.cfg
 set default=0
 set timeout=3
@@ -366,6 +374,4 @@ menuentry "Z-Lag OS (Oracle ARM64)" {
     linux /Image console=ttyAMA0,115200 console=tty0 quiet panic=10 clocksource=arch_sys_counter
 }
 EOF
-
-    echo -e "${GREEN}  ✓ post_build_arm64.sh y menu.cfg creados${NC}"
 }

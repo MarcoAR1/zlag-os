@@ -1,85 +1,71 @@
 # ==============================================================================
 # 🚀 zlag OS - Compilador de Kernel (Smart Cache Multi-Arch)
 # ==============================================================================
-# Recibe el argumento ARCH para construir SOLO lo necesario.
-# Esto genera una imagen Docker con el Kernel ya compilado en /zlag/output
-# ==============================================================================
-
 ARG BASE_IMAGE=ghcr.io/marcoar1/zlag-base:v1
 FROM ${BASE_IMAGE}
 
-# Argumento inyectado por GitHub Actions (x86_64 o arm64)
 ARG ARCH
-ENV TARGET_ARCH=${ARCH}
+ENV ZLAG_ARCH=${ARCH}
 ENV TERM=linux
 
-# Cambiamos a root para configurar el entorno
 USER root
 WORKDIR /zlag
 
 # ==============================================================================
-# 1. Copia de Configuración (Sin Binarios)
+# 1. Copia de Configuración (VINCULACIÓN AL PROYECTO)
 # ==============================================================================
-# Copiamos todo el contenido de la carpeta buildroot/ local a /zlag/
-# NOTA: bin/ está excluido en .dockerignore, así que el caché no se rompe.
-COPY buildroot/ .
+# Copiamos la carpeta 'buildroot/' completa para que las rutas internas
+# de los scripts (scripts/, configs/, board/) coincidan.
+COPY buildroot/ /zlag/
 
-# Aseguramos que el usuario builder tenga control de los archivos copiados
+# Aseguramos permisos correctos en los scripts recién copiados
 RUN chown -R zlag-builder:zlag-builder /zlag && \
-    chmod +x *.sh scripts/*.sh
+    chmod +x /zlag/scripts/*.sh
 
 # ==============================================================================
-# 2. Compilación Condicional (Como zlag-builder)
+# 2. Compilación Condicional
 # ==============================================================================
 USER zlag-builder
 SHELL ["/bin/bash", "-c"]
 
 RUN set -e && \
-    echo "[🔨] Iniciando compilación de zlag OS para: ${TARGET_ARCH}" && \
+    echo "[🔨] Iniciando compilación de zlag OS para: ${ZLAG_ARCH}" && \
     \
-    # Cargar entorno y dependencias comunes
+    # Sincronización de scripts y ejecución de lógica por arquitectura
     source scripts/00_env.sh && \
     source scripts/01_deps.sh && \
     \
-    if [ "${TARGET_ARCH}" = "arm64" ]; then \
+    if [ "${ZLAG_ARCH}" = "arm64" ]; then \
         echo "[⚙️] Configurando ARM64 (Oracle Cloud)..." && \
         source scripts/02_config_arm.sh && \
         configure_system_arm && \
-        # Generar .config y compilar (Kernel + Toolchain)
         make zlag_arm64_defconfig && \
         make -j$(nproc); \
     \
-    elif [ "${TARGET_ARCH}" = "x86_64" ]; then \
+    elif [ "${ZLAG_ARCH}" = "x86_64" ]; then \
         echo "[⚙️] Configurando x86_64 (Vultr/Generic)..." && \
         source scripts/02_config.sh && \
         configure_system && \
-        # Generar .config y compilar (Kernel + Toolchain)
         make zlag_defconfig && \
         make -j$(nproc); \
     \
     else \
-        echo "❌ Error: Arquitectura no soportada: ${TARGET_ARCH}" && exit 1; \
+        echo "❌ Error: Arquitectura no soportada: ${ZLAG_ARCH}" && exit 1; \
     fi && \
     \
-    echo "[✓] Compilación completa para ${TARGET_ARCH}"
+    echo "[✓] Compilación completa para ${ZLAG_ARCH}"
 
 # ==============================================================================
-# 3. Limpieza Inteligente (Reducción de tamaño)
+# 3. Limpieza y Metadata
 # ==============================================================================
-# Borramos código fuente y objetos intermedios para ahorrar espacio,
-# PERO mantenemos la estructura 'output/build' para que 'make' no recompile todo.
+# Limpieza de archivos temporales para reducir el peso de la imagen final
 RUN rm -rf dl/* \
     && rm -rf output/build/host-* \
     && find output/build -name "*.o" -delete
 
-# ==============================================================================
-# 4. Entrypoint
-# ==============================================================================
-USER root
-# Copiamos el script que inyectará el agente en tiempo de ejecución
-COPY docker-build-entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# Vinculación automática con el repositorio de GitHub
+LABEL org.opencontainers.image.source="https://github.com/marcoar1/zlag-os"
+LABEL org.opencontainers.image.title="zlag OS Compiled Kernels"
+LABEL org.opencontainers.image.description="Multi-arch kernel cache for zlag OS (x86_64/arm64)"
 
-# Volvemos al usuario builder para la ejecución final
-USER zlag-builder
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["/bin/bash"]

@@ -66,7 +66,10 @@ USER zlag-builder
 # Volumen para que las descargas de paquetes no se pierdan entre builds
 VOLUME ["/zlag/dl"]
 
-# Metadata de Marca
+# ==============================================================================
+# METADATA Y VINCULACIÓN CON GITHUB
+# ==============================================================================
+LABEL org.opencontainers.image.source="https://github.com/marcoar1/zlag-os"
 LABEL org.opencontainers.image.title="zlag OS Base"
 LABEL org.opencontainers.image.description="Minimalist Buildroot environment for zlag OS nodes"
 LABEL zlag.version="1.0.0"

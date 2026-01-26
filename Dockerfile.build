@@ -17,12 +17,10 @@ USER root
 # ==============================================================================
 # 📦 Sincronización de Fuentes y Configuración
 # ==============================================================================
-# Nota: No copiamos 'bin/' aquí para no romper el caché del Kernel.
-# El agente se inyectará vía volumen en el Job de ensamblaje final.
-
 WORKDIR /zlag
 
 # Copiar solo lo necesario para configurar el Kernel y Buildroot
+# Asegúrate de que estas carpetas existan en tu contexto de build
 COPY buildroot/scripts/ ./scripts/
 COPY buildroot/configs/ ./configs/
 COPY buildroot/board/zlag/ ./board/zlag/ 
@@ -55,10 +53,8 @@ RUN set -e && \
     fi
 
 # ==============================================================================
-# 🧹 Limpieza Quirúrgica
+# 🧹 Limpieza Quirúrgica (Ahorro de espacio en imagen final)
 # ==============================================================================
-# Eliminamos archivos pesados que no se necesitan para el empaquetado final,
-# manteniendo los .stamp para que el 'make' futuro sea instantáneo.
 RUN rm -rf dl/* && \
     find output/build -name "*.o" -delete && \
     rm -rf output/build/host-*
@@ -67,8 +63,16 @@ RUN rm -rf dl/* && \
 # 🚀 Entrypoint para Inyección y Ensamblaje
 # ==============================================================================
 USER root
+# Asegúrate de tener este archivo en la raíz de tu proyecto
 COPY docker-build-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# ==============================================================================
+# METADATA Y VINCULACIÓN CON GITHUB
+# ==============================================================================
+LABEL org.opencontainers.image.source="https://github.com/marcoar1/zlag-os"
+LABEL org.opencontainers.image.title="zlag OS Compiled Kernel"
+LABEL org.opencontainers.image.description="Pre-compiled kernel and toolchain for zlag OS nodes"
 
 USER zlag-builder
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

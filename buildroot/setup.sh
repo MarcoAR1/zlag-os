@@ -64,6 +64,8 @@ header() {
 # Lógica de Make (Full Build)
 run_full_build() {
     echo -e "${RED}[☢️] LIMPIEZA NUCLEAR DE KERNEL...${NC}"
+    
+    # Comandos separados correctamente para evitar errores de sintaxis
     rm -rf output/build/linux-* rm -f output/build/.fragments_list
     rm -f output/images/bzImage
 
@@ -106,7 +108,8 @@ if [ "$1" == "build" ]; then
     if [ -f "bin/z-lag-agent-x86_64" ]; then
         install_prebuilt_agent "x86_64"
     else
-        echo -e "${YELLOW}[!] Agente binario no encontrado. Continuando solo con compilación de Kernel.${NC}"
+        echo -e "${YELLOW}[!] Agente binario (bin/z-lag-agent-x86_64) no encontrado.${NC}"
+        echo -e "${YELLOW}    Continuando solo con compilación de Kernel.${NC}"
     fi
     
     run_full_build

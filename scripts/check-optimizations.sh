@@ -1,10 +1,17 @@
 #!/bin/bash
 set -e
 
-echo "🔍 Verificando optimizaciones implementadas..."
+echo "🔍 Verificando optimizaciones implementadas en Zlag..."
 
+# 1. DETECCIÓN DE RUTAS
+# SCRIPT_DIR será ".../tu-proyecto/scripts"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# PROJECT_ROOT será ".../tu-proyecto"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/" && pwd)"
+
+# Definimos las rutas exactas que pediste
+X86_CONFIG="$PROJECT_ROOT/buildroot/scripts/02_config.sh"
+ARM_CONFIG="$PROJECT_ROOT/buildroot/scripts/02_config_arm.sh"
 
 # Counter for checks
 CHECKS_PASSED=0
@@ -29,40 +36,48 @@ check_config() {
 
 echo ""
 echo "📦 Verificando x86_64 configs..."
+echo "   Ruta: $X86_CONFIG"
 
-# x86_64 checks
-X86_CONFIG="$PROJECT_ROOT/buildroot/scripts/02_config.sh"
+if [ ! -f "$X86_CONFIG" ]; then
+    echo "⛔ ERROR CRÍTICO: No encuentro el archivo."
+    echo "   Verifica que exista: buildroot/scripts/02_config.sh"
+    exit 1
+fi
 
 check_config "CONFIG_NET_RX_BUSY_POLL=y" "$X86_CONFIG" "Busy polling"
 check_config "CONFIG_RPS=y" "$X86_CONFIG" "RPS (Receive Packet Steering)"
 check_config "CONFIG_RFS_ACCEL=y" "$X86_CONFIG" "RFS (Receive Flow Steering)"
-check_config "CPU pinning" "$X86_CONFIG" "CPU pinning & interrupt affinity"
+check_config "# IRQ Affinity" "$X86_CONFIG" "CPU pinning & interrupt affinity"
 check_config "BR2_TARGET_ROOTFS_SQUASHFS=y" "$X86_CONFIG" "SquashFS compression"
 check_config "BR2_TARGET_ROOTFS_SQUASHFS4_XZ_EXTREME=y" "$X86_CONFIG" "SquashFS XZ extreme"
-check_config "CONFIG_BPF=y" "$X86_CONFIG" "BPF/eBPF support"
+check_config "CONFIG_BPF_SYSCALL=y" "$X86_CONFIG" "BPF/eBPF support"
 check_config "CONFIG_XDP_SOCKETS=y" "$X86_CONFIG" "XDP sockets"
 
 echo ""
 echo "📦 Verificando ARM64 configs..."
+echo "   Ruta: $ARM_CONFIG"
 
-# ARM64 checks
-ARM_CONFIG="$PROJECT_ROOT/buildroot/scripts/02_config_arm.sh"
+if [ ! -f "$ARM_CONFIG" ]; then
+    echo "⛔ ERROR CRÍTICO: No encuentro el archivo."
+    echo "   Verifica que exista: buildroot/scripts/02_config_arm.sh"
+    exit 1
+fi
 
 check_config "CONFIG_NET_RX_BUSY_POLL=y" "$ARM_CONFIG" "Busy polling (ARM64)"
 check_config "CONFIG_RPS=y" "$ARM_CONFIG" "RPS (ARM64)"
 check_config "CONFIG_RFS_ACCEL=y" "$ARM_CONFIG" "RFS (ARM64)"
-check_config "CPU pinning" "$ARM_CONFIG" "CPU pinning (ARM64)"
+check_config "# IRQ Affinity" "$ARM_CONFIG" "CPU pinning (ARM64)"
 check_config "BR2_TARGET_ROOTFS_SQUASHFS=y" "$ARM_CONFIG" "SquashFS (ARM64)"
 check_config "BR2_TARGET_ROOTFS_SQUASHFS4_XZ_EXTREME=y" "$ARM_CONFIG" "SquashFS XZ (ARM64)"
-check_config "CONFIG_BPF=y" "$ARM_CONFIG" "BPF/eBPF (ARM64)"
+check_config "CONFIG_BPF_SYSCALL=y" "$ARM_CONFIG" "BPF/eBPF (ARM64)"
 check_config "CONFIG_XDP_SOCKETS=y" "$ARM_CONFIG" "XDP sockets (ARM64)"
 
 echo ""
-echo "🔍 Verificando que XDP NO está implementado en OS..."
+echo "🔍 Verificando que XDP NO está implementado en OS (Debe estar en Agente)..."
 
-# Verificar que XDP fue removido (no debe tener compilación ni loading)
 CHECKS_TOTAL=$((CHECKS_TOTAL + 2))
 
+# Verificamos que NO existan reglas de compilación de XDP en el OS
 if ! grep -q "clang.*xdp_wireguard" "$X86_CONFIG"; then
     echo "  ✅ XDP compilation removida de x86_64"
     CHECKS_PASSED=$((CHECKS_PASSED + 1))
@@ -88,11 +103,9 @@ if [ "$CHECKS_PASSED" -eq "$CHECKS_TOTAL" ]; then
     echo "Optimizaciones activas:"
     echo "  🚀 Busy polling (CONFIG_NET_RX_BUSY_POLL)"
     echo "  🚀 RPS/RFS (multi-core packet steering)"
-    echo "  🚀 CPU pinning & interrupt affinity"
+    echo "  🚀 CPU pinning (IRQ Affinity)"
     echo "  📦 SquashFS XZ extreme compression"
-    echo "  🧪 XDP/eBPF kernel support (para agent)"
-    echo ""
-    echo "XDP implementation: Agent-owned (docs/AGENT-XDP-INTEGRATION.md)"
+    echo "  🧪 eBPF/XDP kernel support (User-space Agent owned)"
     exit 0
 else
     echo "❌ FALTAN OPTIMIZACIONES - Revisar configs"

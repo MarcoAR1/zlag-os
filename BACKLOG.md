@@ -2,7 +2,6 @@
 
 > **Última actualización**: 23 de enero de 2026  
 > **Contexto**: Gaming VPN OS - Optimizado para ultra-baja latencia
-
 ---
 
 ## ✅ Completado (Sprint 1)

@@ -6,8 +6,11 @@ set -euo pipefail
 configure_system() {
     echo -e "${BLUE}[⚙️] Generando archivos de configuración e inyectando ENV...${NC}"
     mkdir -p board/zlag
+    mkdir -p board/zlag/rootfs-overlay
 
+    # ==========================================================================
     # 1. FRAGMENTO DEL KERNEL (SOPORTE TOTAL: LOGGING + INGRESS + FLOW)
+    # ==========================================================================
     cat <<EOF > board/zlag/linux.fragment
 # --- BUILD FIX ---
 # CONFIG_OBJTOOL is not set
@@ -41,7 +44,7 @@ CONFIG_NET_SCHED=y
 # --- FIREWALL CORE (NETFILTER) ---
 CONFIG_NETFILTER=y
 CONFIG_NETFILTER_ADVANCED=y
-CONFIG_NETFILTER_INGRESS=y       # <--- CRÍTICO: Habilita hook ingress
+CONFIG_NETFILTER_INGRESS=y
 CONFIG_NETFILTER_NETLINK_GLUE_CT=y
 CONFIG_NF_CONNTRACK=y
 CONFIG_NF_LOG_COMMON=y
@@ -67,7 +70,7 @@ CONFIG_NFT_CT=y
 CONFIG_NFT_RBTREE=y
 CONFIG_NFT_HASH=y
 CONFIG_NFT_COUNTER=y
-CONFIG_NFT_LOG=y               # Frontend de log
+CONFIG_NFT_LOG=y
 CONFIG_NFT_LIMIT=y
 CONFIG_NFT_MASQ=y
 CONFIG_NFT_NAT=y
@@ -121,8 +124,9 @@ CONFIG_BPF_SYSCALL=y
 CONFIG_BPF_JIT=y
 EOF
 
-    # 2. CONFIGURACIÓN BUILDROOT
-    # FIX GRUB: Agregado 'configfile' para evitar error visual
+    # ==========================================================================
+    # 2. CONFIGURACIÓN BUILDROOT (zlag_defconfig)
+    # ==========================================================================
     cat <<EOF > configs/zlag_defconfig
 BR2_x86_64=y
 BR2_CCACHE=y
@@ -168,7 +172,9 @@ BR2_TARGET_GRUB2_BUILTIN_CONFIG_PC="board/zlag/grub-pre.cfg"
 BR2_TARGET_GRUB2_BUILTIN_MODULES_PC="boot linux ext2 fat part_msdos part_gpt normal biosdisk iso9660 search search_fs_file echo test configfile"
 EOF
 
-    # 3. SCRIPTS DE SOPORTE (POST-BUILD)
+    # ==========================================================================
+    # 3. SCRIPTS DE SOPORTE (POST-BUILD & INIT)
+    # ==========================================================================
     cat <<'EOF' > board/zlag/post_build.sh
 #!/bin/bash
 set -e
@@ -266,7 +272,8 @@ if [ -n "$IFACE" ]; then
         echo "⚠️ Timeout esperando DHCP."
     fi
 
-    # C. OPTIMIZACIONES GAMING
+    # C. OPTIMIZACIONES GAMING (RUNTIME)
+    # Activamos Busy Poll en runtime porque el Kernel ya tiene el soporte (CONFIG_NET_RX_BUSY_POLL=y)
     echo 50 > /proc/sys/net/core/busy_poll
     echo 50 > /proc/sys/net/core/busy_read
     echo 300000 > /proc/sys/net/core/netdev_max_backlog
@@ -356,7 +363,9 @@ echo "✓ Post-build completado: Full Kernel + Pre-Heat NFT"
 EOF
     chmod +x board/zlag/post_build.sh
 
+    # ==========================================================================
     # 4. GRUB CONFIGS
+    # ==========================================================================
     cat <<EOF > board/zlag/grub-pre.cfg
 set root=(cd)
 set prefix=(cd)/boot/grub
