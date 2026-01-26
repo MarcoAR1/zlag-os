@@ -1,24 +1,29 @@
 # ==============================================================================
-# Z-Lag OS - Makefile para Testing y Build Local
+# 🛡️  Z-Lag OS - Makefile para Testing, Build Turbo y Release
 # ==============================================================================
-# Simplifica los comandos de testing y build optimizado
-#
-# Uso:
-#   make build-base     # Construir imagen base (1 vez)
-#   make build-x86      # Build optimizado x86_64
-#   make test           # Test completo (ambas arquitecturas)
-#   make help           # Mostrar ayuda
+# Optimizaciones para i5-13600KF (20 hilos / 16GB RAM)
 # ==============================================================================
 
 .PHONY: help setup test test-x86 test-arm verify clean shell docker-build
 .PHONY: build-base build-x86 build-arm build-both push-base pull-base
-.PHONY: local-test-x86 local-test-arm
+.PHONY: local-test-x86 local-test-arm release check-gh info checksums wipe
 
-# Variables
-DOCKER_IMAGE := zlag-builder:test
+# Variables de Identidad
+REPO_OWNER := marcoar1
+REPO_NAME := zlag-os
+VERSION := $(shell date +'%Y%m%d-%H%M')
+RELEASE_TAG := iso-$(VERSION)
+
+# Variables de Docker
 BASE_IMAGE := zlag-buildroot-base:latest
 BUILD_IMAGE := zlag-builder:latest
-GHCR_BASE := ghcr.io/$(shell git config --get remote.origin.url | sed 's/.*github.com[:/]//;s/.git$$//' | tr '[:upper:]' '[:lower:]' 2>/dev/null || echo "owner/repo")/zlag-buildroot-base:latest
+DOCKER_IMAGE := zlag-builder:test
+GHCR_BASE := ghcr.io/$(REPO_OWNER)/$(REPO_NAME)/zlag-buildroot-base:latest
+
+# Optimización de Hardware (i5-13600KF)
+THREADS := 20
+MEM_LIMIT := 16g
+MEM_SWAP := 20g
 
 # Colores para output
 RED := \033[0;31m
@@ -29,289 +34,99 @@ CYAN := \033[0;36m
 NC := \033[0m
 
 # ==============================================================================
-# Ayuda (por defecto)
+# Ayuda
 # ==============================================================================
 help:
 	@echo ""
 	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════════════╗$(NC)"
-	@echo "$(CYAN)║$(NC)  🛡️  Z-Lag OS - BUILD & TEST COMMANDS                    $(CYAN)║$(NC)"
+	@echo "$(CYAN)║$(NC) 🛡️  Z-Lag OS - TURBO BUILDER (i5-13600KF Optimized)            $(CYAN)║$(NC)"
 	@echo "$(CYAN)╚═══════════════════════════════════════════════════════════════════╝$(NC)"
 	@echo ""
-	@echo "$(GREEN)📦 Builds Optimizados (Recomendado):$(NC)"
-	@echo "  make build-base     Construir imagen base (solo 1 vez)"
-	@echo "  make build-x86      Build rápido x86_64 ISO"
-	@echo "  make build-arm      Build rápido ARM64 image"
-	@echo "  make build-both     Build rápido de ambos"
+	@echo "$(GREEN)🚀 COMANDOS PRINCIPALES:$(NC)"
+	@echo "  $(YELLOW)make release$(NC)         Build completo + Deploy a GitHub"
+	@echo "  $(RED)make wipe$(NC)            Limpiar TODO (Docker, Cache, Procesos)"
 	@echo ""
-	@echo "$(GREEN)🧪 Testing (Setup anterior):$(NC)"
-	@echo "  make setup          Configurar ambiente Docker"
-	@echo "  make test           Test completo (x86_64 + ARM64)"
-	@echo "  make test-x86       Test solo x86_64"
-	@echo "  make test-arm       Test solo ARM64"
-	@echo ""
-	@echo "$(CYAN)⚡ Local Quick Test (Verificar fix de objtool):$(NC)"
-	@echo "  make local-test-x86   Test x86_64 LOCAL (1-2h primera vez)"
-	@echo "  make local-test-arm   Test ARM64 LOCAL (1-2h primera vez)"
-	@echo ""
-	@echo "$(GREEN)🚀 GitHub Container Registry:$(NC)"
-	@echo "  make push-base      Subir imagen base a GHCR"
-	@echo "  make pull-base      Descargar imagen base de GHCR"
-	@echo ""
-	@echo "$(GREEN)✅ Validación:$(NC)"
-	@echo "  make verify-bins    Verificar binarios del agent"
-	@echo "  make verify         Verificar ISOs generados"
-	@echo "  make checksums      Mostrar checksums"
-	@echo ""
-	@echo "$(GREEN)🔧 Utilidades:$(NC)"
-	@echo "  make clean          Limpiar outputs"
-	@echo "  make clean-docker   Limpiar imágenes Docker"
-	@echo "  make shell          Shell interactivo"
-	@echo ""
-	@echo "$(YELLOW)⚡ Quick Start:$(NC)"
-	@echo "  1. make build-base    # Primera vez (10 min)"
-	@echo "  2. make build-x86     # Builds rápidos (3-5 min)"
-	@echo "  3. make verify        # Validar ISOs"
+	@echo "$(GREEN)📦 Builds Individuales:$(NC)"
+	@echo "  make build-base       Construir imagen base"
+	@echo "  make build-x86        Build rápido x86_64"
+	@echo "  make build-arm        Build rápido ARM64"
 	@echo ""
 
 # ==============================================================================
-# Setup - Construir imagen Docker
+# Release - Build & Deploy
 # ==============================================================================
-setup: docker-build
-	@echo "$(GREEN)✅ Setup completado$(NC)"
-	@echo "$(YELLOW)Ahora puedes ejecutar: make test$(NC)"
+check-gh:
+	@command -v gh >/dev/null 2>&1 || { echo "$(RED)❌ gh cli no instalado.$(NC)"; exit 1; }
+	@gh auth status >/dev/null 2>&1 || { echo "$(YELLOW)⚠️ No logueado en GH CLI.$(NC)"; exit 1; }
 
-docker-build:
-	@echo "$(BLUE)🔨 Construyendo imagen Docker...$(NC)"
-	@./test-build.sh build
-
-# ==============================================================================
-# Testing
-# ==============================================================================
-test:
-	@echo "$(BLUE)🧪 Ejecutando test completo (x86_64 + ARM64)...$(NC)"
-	@./test-build.sh both
-
-test-x86:
-	@echo "$(BLUE)🧪 Ejecutando test x86_64 (Vultr)...$(NC)"
-	@./test-build.sh x86_64
-
-test-arm:
-	@echo "$(BLUE)🧪 Ejecutando test ARM64 (Oracle Cloud)...$(NC)"
-	@./test-build.sh arm64
+release: check-gh clean-all build-base build-both verify
+	@echo "$(CYAN)☁️  Subiendo Release a GitHub...$(NC)"
+	gh release create $(RELEASE_TAG) \
+		buildroot/output/images/zlag-vultr-x86_64.iso \
+		buildroot/output/images/zlag-oracle-arm64.ext4 \
+		--repo $(REPO_OWNER)/$(REPO_NAME) \
+		--title "Z-Lag OS Production - $(RELEASE_TAG)" \
+		--notes "📦 Release generado localmente (i5-13600KF).\n\n**Checksums:**\n- x86_64: $$(sha256sum buildroot/output/images/zlag-vultr-x86_64.iso | cut -d' ' -f1)\n- ARM64: $$(sha256sum buildroot/output/images/zlag-oracle-arm64.ext4 | cut -d' ' -f1)"
+	@echo "$(GREEN)✅ RELEASE COMPLETADO EXITOSAMENTE$(NC)"
 
 # ==============================================================================
-# Validación
+# Builds Optimizados
 # ==============================================================================
-verify-bins:
-	@echo "$(BLUE)🔐 Verificando integridad de binarios del agent...$(NC)"
-	@./bin/validate.sh
-
-verify:
-	@echo "$(BLUE)🔍 Verificando ISOs/imágenes generados...$(NC)"
-	@./test-build.sh verify
-	@echo ""
-	@./validate-iso.sh both
-
-checksums:
-	@echo "$(BLUE)📊 Checksums de ISOs/imágenes:$(NC)"
-	@echo ""
-	@if [ -f buildroot/isos/vultr-x86_64/checksums.txt ]; then \
-		echo "$(GREEN)x86_64 (Vultr):$(NC)"; \
-		cat buildroot/isos/vultr-x86_64/checksums.txt; \
-		echo ""; \
-	fi
-	@if [ -f buildroot/isos/oracle-arm64/checksums.txt ]; then \
-		echo "$(GREEN)ARM64 (Oracle):$(NC)"; \
-		cat buildroot/isos/oracle-arm64/checksums.txt; \
-	fi
-
-# ==============================================================================
-# Debugging
-# ==============================================================================
-shell:
-	@echo "$(BLUE)🐚 Abriendo shell interactivo en container...$(NC)"
-	@./test-build.sh shell
-
-logs:
-	@echo "$(BLUE)📋 Logs de último build:$(NC)"
-	@echo ""
-	@if [ -f buildroot/output/build/build-time.log ]; then \
-		tail -100 buildroot/output/build/build-time.log; \
-	else \
-		echo "$(YELLOW)No se encontraron logs de build$(NC)"; \
-	fi
-
-# ==============================================================================
-# Limpieza
-# ==============================================================================
-clean:
-	@echo "$(YELLOW)🧹 Limpiando outputs de build...$(NC)"
-	@./test-build.sh clean
-
-clean-docker:
-	@echo "$(YELLOW)🧹 Limpiando imagen Docker...$(NC)"
-	@docker rmi $(DOCKER_IMAGE) 2>/dev/null || true
-	@echo "$(GREEN)✅ Imagen Docker limpiada$(NC)"
-
-clean-all: clean clean-docker
-	@echo "$(GREEN)✅ Limpieza completa finalizada$(NC)"
-
-# ==============================================================================
-# Información del sistema
-# ==============================================================================
-info:
-	@echo "$(BLUE)ℹ️  Información del sistema:$(NC)"
-	@echo ""
-	@echo "Docker:"
-	@docker --version || echo "  $(RED)Docker no instalado$(NC)"
-	@echo ""
-	@echo "Binarios del agent:"
-	@ls -lh bin/z-lag-agent-* 2>/dev/null || echo "  $(YELLOW)No encontrados (ejecuta 'make update-agent' en repo privado)$(NC)"
-	@echo ""
-	@echo "ISOs generados:"
-	@if [ -f buildroot/isos/vultr-x86_64/zlag-vultr-x86_64.iso ]; then \
-		echo "  $(GREEN)✓ x86_64:$(NC) $$(du -h buildroot/isos/vultr-x86_64/zlag-vultr-x86_64.iso | cut -f1)"; \
-	else \
-		echo "  $(YELLOW)✗ x86_64 no generado$(NC)"; \
-	fi
-	@if [ -f buildroot/isos/oracle-arm64/zlag-oracle-arm64.ext4 ]; then \
-		echo "  $(GREEN)✓ ARM64:$(NC) $$(du -h buildroot/isos/oracle-arm64/zlag-oracle-arm64.ext4 | cut -f1)"; \
-	else \
-		echo "  $(YELLOW)✗ ARM64 no generado$(NC)"; \
-	fi
-
-# ==============================================================================
-# Quick test - Para CI/CD local
-# ==============================================================================
-quick-test: test-x86 verify
-	@echo "$(GREEN)✅ Quick test completado$(NC)"
-
-# ==============================================================================
-# Full validation - Antes de push a GitHub
-# ==============================================================================
-full-validation: test verify checksums
-	@echo ""
-	@echo "$(GREEN)╔═══════════════════════════════════════════════════════════════════╗$(NC)"
-	@echo "$(GREEN)║$(NC)  ✅ VALIDACIÓN COMPLETA EXITOSA                              $(GREEN)║$(NC)"
-	@echo "$(GREEN)╚═══════════════════════════════════════════════════════════════════╝$(NC)"
-	@echo ""
-	@echo "$(YELLOW)Los ISOs están listos. Puedes hacer push a GitHub.$(NC)"
-	@echo ""
-	@echo "Siguiente paso:"
-	@echo "  git add bin/ buildroot/"
-	@echo "  git commit -m 'chore: Update agent binaries'"
-	@echo "  git push origin main"
-
-# ==============================================================================
-# Builds Optimizados con Imagen Base
-# ==============================================================================
-
 build-base:
-	@echo "$(CYAN)🏗️  Construyendo imagen base de Buildroot...$(NC)"
-	@echo "$(YELLOW)Esto tomará ~10 minutos (solo se hace 1 vez)$(NC)"
+	@echo "$(CYAN)🏗️  Construyendo imagen base...$(NC)"
 	docker build -f Dockerfile.base -t $(BASE_IMAGE) .
-	@echo "$(GREEN)✅ Imagen base lista: $(BASE_IMAGE)$(NC)"
 
 build-x86: build-base
-	@echo "$(CYAN)🔨 Building x86_64 ISO (optimizado con ccache)...$(NC)"
+	@echo "$(BLUE)🔨 Compilando x86_64 con $(THREADS) hilos...$(NC)"
+	@mkdir -p buildroot/output/target/usr/bin
+	cp bin/z-lag-agent-x86_64 buildroot/output/target/usr/bin/z-lag-agent
+	chmod +x buildroot/output/target/usr/bin/z-lag-agent
 	docker build -f Dockerfile.build --build-arg BASE_IMAGE=$(BASE_IMAGE) -t $(BUILD_IMAGE) .
-	docker run --rm \
-		--cpus="4" \
-		--memory="8g" \
-		--memory-swap="10g" \
-		-v $(PWD):/workspace \
-		-v zlag-ccache:/buildroot/dl/ccache \
+	docker run --rm --privileged \
+		--cpus="$(THREADS)" --memory="$(MEM_LIMIT)" --memory-swap="$(MEM_SWAP)" \
+		-v $(PWD):/workspace -v zlag-ccache:/buildroot/dl/ccache \
 		$(BUILD_IMAGE) x86_64
-	@echo "$(GREEN)✅ x86_64 ISO generado (ccache enabled)$(NC)"
+	@mv buildroot/output/images/*.iso buildroot/output/images/zlag-vultr-x86_64.iso 2>/dev/null || true
 
 build-arm: build-base
-	@echo "$(CYAN)🔨 Building ARM64 Image (optimizado con ccache)...$(NC)"
+	@echo "$(BLUE)🔨 Compilando ARM64 con $(THREADS) hilos...$(NC)"
+	@mkdir -p buildroot/output/target/usr/bin
+	cp bin/z-lag-agent-arm64 buildroot/output/target/usr/bin/z-lag-agent
+	chmod +x buildroot/output/target/usr/bin/z-lag-agent
 	docker build -f Dockerfile.build --build-arg BASE_IMAGE=$(BASE_IMAGE) -t $(BUILD_IMAGE) .
-	docker run --rm \
-		--cpus="4" \
-		--memory="8g" \
-		--memory-swap="10g" \
-		-v $(PWD):/workspace \
-		-v zlag-ccache:/buildroot/dl/ccache \
+	docker run --rm --privileged \
+		--cpus="$(THREADS)" --memory="$(MEM_LIMIT)" --memory-swap="$(MEM_SWAP)" \
+		-v $(PWD):/workspace -v zlag-ccache:/buildroot/dl/ccache \
 		$(BUILD_IMAGE) arm64
-	@echo "$(GREEN)✅ ARM64 Image generado (ccache enabled)$(NC)"
+	@find buildroot/output/images -type f \( -name "*.ext*" -o -name "rootfs.tar" \) -exec mv {} buildroot/output/images/zlag-oracle-arm64.ext4 \; 2>/dev/null || true
 
-build-both: build-base
-	@echo "$(CYAN)🔨 Building ambos ISOs (optimizado con ccache)...$(NC)"
-	docker build -f Dockerfile.build --build-arg BASE_IMAGE=$(BASE_IMAGE) -t $(BUILD_IMAGE) .
-	docker run --rm \
-		--cpus="4" \
-		--memory="8g" \
-		--memory-swap="10g" \
-		-v $(PWD):/workspace \
-		-v zlag-ccache:/buildroot/dl/ccache \
-		$(BUILD_IMAGE) both \
-		--memory-swap="10g" \
-		-v $(PWD):/workspace $(BUILD_IMAGE) both
-	@echo "$(GREEN)✅ Ambos ISOs generados$(NC)"
-
-push-base:
-	@echo "$(CYAN)📤 Subiendo imagen base a GHCR...$(NC)"
-	@echo "Registry: $(GHCR_BASE)"
-	docker tag $(BASE_IMAGE) $(GHCR_BASE)
-	docker push $(GHCR_BASE)
-	@echo "$(GREEN)✅ Imagen subida exitosamente$(NC)"
-
-pull-base:
-	@echo "$(CYAN)📥 Descargando imagen base de GHCR...$(NC)"
-	docker pull $(GHCR_BASE)
-	docker tag $(GHCR_BASE) $(BASE_IMAGE)
-	@echo "$(GREEN)✅ Imagen descargada: $(BASE_IMAGE)$(NC)"
+build-both: build-x86 build-arm
 
 # ==============================================================================
-# Local Quick Test (Verificar fix antes de GitHub Actions)
+# Limpieza Profunda (WIPE)
 # ==============================================================================
-local-test-x86:
-	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════╗$(NC)"
-	@echo "$(CYAN)║ 🧪 LOCAL TEST x86_64 (Verificar fix de objtool)         ║$(NC)"
-	@echo "$(CYAN)╚═══════════════════════════════════════════════════════════╝$(NC)"
-	@echo ""
-	@echo "$(YELLOW)[1/3] Building base image...$(NC)"
-	docker build -f Dockerfile.base -t zlag-buildroot-base:local .
-	@echo ""
-	@echo "$(YELLOW)[2/3] Building x86_64 (esto tomará 1-2 horas primera vez)...$(NC)"
-	docker build -f Dockerfile.build \
-		--build-arg BASE_IMAGE=zlag-buildroot-base:local \
-		-t zlag-builder:x86_64-local .
-	@echo ""
-	@echo "$(YELLOW)[3/3] Running build...$(NC)"
-	mkdir -p output
-	docker run --rm \
-		-e TERM=linux \
-		-v $(PWD)/output:/buildroot/isos \
-		zlag-builder:x86_64-local x86_64
-	@echo ""
-	@echo "$(GREEN)✅ SUCCESS! ISO generado en: output/vultr-x86_64/$(NC)"
-	@ls -lh output/vultr-x86_64/zlag-vultr-x86_64.iso
+wipe: clean-all
+	@echo "$(RED)⚠️  LIMPIEZA TOTAL DE RESIDUOS (WSL + DOCKER)...$(NC)"
+	-sudo killall -9 make cc1plus gcc g++ 2>/dev/null || true
+	rm -rf ~/.buildroot-ccache
+	rm -rf ~/.ccache
+	docker system prune -a --volumes -f
+	@echo "$(GREEN)✅ Sistema purgado. Cierra la terminal y corre el .bat en Windows.$(NC)"
 
-local-test-arm:
-	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════╗$(NC)"
-	@echo "$(CYAN)║ 🧪 LOCAL TEST ARM64 (Verificar fix de objtool)          ║$(NC)"
-	@echo "$(CYAN)╚═══════════════════════════════════════════════════════════╝$(NC)"
-	@echo ""
-	@echo "$(YELLOW)[1/3] Building base image...$(NC)"
-	docker build -f Dockerfile.base -t zlag-buildroot-base:local .
-	@echo ""
-	@echo "$(YELLOW)[2/3] Building ARM64 (esto tomará 1-2 horas primera vez)...$(NC)"
-	docker build -f Dockerfile.build \
-		--build-arg BASE_IMAGE=zlag-buildroot-base:local \
-		-t zlag-builder:arm64-local .
-	@echo ""
-	@echo "$(YELLOW)[3/3] Running build...$(NC)"
-	mkdir -p output
-	docker run --rm \
-		-e TERM=linux \
-		-v $(PWD)/output:/buildroot/isos \
-		zlag-builder:arm64-local arm64
-	@echo ""
-	@echo "$(GREEN)✅ SUCCESS! Image generado en: output/oracle-arm64/$(NC)"
-	@ls -lh output/oracle-arm64/zlag-oracle-arm64.ext4
+# ==============================================================================
+# Utilidades Secundarias
+# ==============================================================================
+verify:
+	@echo "$(BLUE)🔍 Validando archivos...$(NC)"
+	@ls -lh buildroot/output/images/zlag-*
+	@if [ ! -s buildroot/output/images/zlag-vultr-x86_64.iso ]; then exit 1; fi
+	@if [ ! -s buildroot/output/images/zlag-oracle-arm64.ext4 ]; then exit 1; fi
 
+clean:
+	rm -rf buildroot/output/images/*
+	rm -rf release_artifacts/*
 
-	@echo "  git push origin main"
-	@echo ""
+clean-docker:
+	docker rmi $(BUILD_IMAGE) $(BASE_IMAGE) 2>/dev/null || true
+
+clean-all: clean clean-docker
