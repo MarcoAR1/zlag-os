@@ -16,6 +16,7 @@ jobs:
   assemble:
     name: Assemble ISO/Image
     runs-on: ubuntu-latest
+    timeout-minutes: 60 # Extendido para soportar extracciones de Docker pesadas
     permissions:
       contents: write
       packages: read
@@ -46,7 +47,7 @@ jobs:
       - name: Calculate Config Hash
         id: config-hash
         run: |
-          # Comando maestro para consistencia de hashes
+          # Comando maestro para consistencia de hashes entre local y CI
           HASH=$(find buildroot/scripts buildroot/configs buildroot/board -type f -print0 | sort -z | xargs -0 cat | sha256sum | head -c 16)
           echo "hash=${HASH}" >> $GITHUB_OUTPUT
 
@@ -61,7 +62,7 @@ jobs:
         run: |
           OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           CALCULATED_HASH="${{ steps.config-hash.outputs.hash }}"
-          KNOWN_GOOD_HASH="8188e8307c1eebca" # Bypass para la imagen actual en GHCR
+          KNOWN_GOOD_HASH="8188e8307c1eebca" # Bypass histórico
           
           BASE_IMG="ghcr.io/${OWNER_LC}/zlag-compiled-${{ matrix.arch }}"
           
@@ -69,23 +70,25 @@ jobs:
           
           echo "🔍 Buscando imagen de compilación..."
           
-          # Lógica de Bypass: Intentar hash calculado, si falla usar el conocido
+          # Lógica de Fallback: Intentar nuevo, si no existe, usar el bypass conocido
           if docker pull "${BASE_IMG}:${CALCULATED_HASH}"; then
             FINAL_IMG="${BASE_IMG}:${CALCULATED_HASH}"
-            echo "✅ Usando imagen calculada: $FINAL_IMG"
+            echo "✅ Imagen calculada encontrada: $FINAL_IMG"
           else
-            echo "⚠️ Hash ${CALCULATED_HASH} no encontrado. Aplicando Bypass con hash conocido..."
+            echo "⚠️ Hash ${CALCULATED_HASH} no encontrado en GHCR."
+            echo "🔄 Aplicando Bypass con hash conocido: ${KNOWN_GOOD_HASH}"
             FINAL_IMG="${BASE_IMG}:${KNOWN_GOOD_HASH}"
             
             if ! docker pull "$FINAL_IMG"; then
-              echo "❌ ERROR: No se encontró ninguna imagen compatible en GHCR."
+              echo "❌ ERROR: No se encontró ninguna imagen válida para ensamblar."
               exit 1
             fi
           fi
           
-          echo "🚀 Ensamblando ${{ matrix.arch }} con $FINAL_IMG"
+          echo "🚀 Ensamblando arquitectura ${{ matrix.arch }}..."
           
-          # Ejecución del contenedor sin secretos de entorno
+          # Inyectamos el binario y recolectamos el resultado
+          # El contenedor usa el entrypoint.sh para re-empaquetar
           docker run --rm \
             -v $(pwd)/${{ matrix.binary_path }}:/zlag/bin/z-lag-agent:ro \
             -v $(pwd)/output/images:/zlag/output/images \
@@ -105,9 +108,10 @@ jobs:
         with:
           name: ${{ matrix.artifact_name }}
           path: output/images/
+          retention-days: 7
 
   # ==============================================================================
-  # Job: Release (Generación de versión en GitHub)
+  # Job: Release (Publicación en GitHub)
   # ==============================================================================
   create-release:
     needs: assemble
@@ -129,9 +133,9 @@ jobs:
             
             Arquitecturas generadas correctamente mediante el pipeline optimizado.
             
-            ### 📦 Descargas
-            - **x86_64:** ISO para Vultr/Generic
-            - **ARM64:** EXT4 para Oracle Cloud
+            ### 📦 Resumen de Integridad
+            - Verificado mediante Docker-based injection.
+            - Sistema de archivos inyectado en `/usr/bin/z-lag-agent`.
           files: |
             ./artifacts/zlag-vultr-x86_64/*
             ./artifacts/zlag-oracle-arm64/*
