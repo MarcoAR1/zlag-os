@@ -58,6 +58,7 @@ help:
 	@echo "  make pull-base      Descargar imagen base de GHCR"
 	@echo ""
 	@echo "$(GREEN)✅ Validación:$(NC)"
+	@echo "  make verify-bins    Verificar binarios del agent"
 	@echo "  make verify         Verificar ISOs generados"
 	@echo "  make checksums      Mostrar checksums"
 	@echo ""
@@ -101,6 +102,10 @@ test-arm:
 # ==============================================================================
 # Validación
 # ==============================================================================
+verify-bins:
+	@echo "$(BLUE)🔐 Verificando integridad de binarios del agent...$(NC)"
+	@./bin/validate.sh
+
 verify:
 	@echo "$(BLUE)🔍 Verificando ISOs/imágenes generados...$(NC)"
 	@./test-build.sh verify
