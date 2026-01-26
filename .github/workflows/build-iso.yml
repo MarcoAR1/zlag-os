@@ -10,9 +10,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ==============================================================================
-  # Job Único: Ensamblaje Final (Inyección y Generación de ISO/Imagen)
-  # ==============================================================================
   assemble:
     name: Assemble ISO/Image
     runs-on: ubuntu-latest
@@ -79,28 +76,42 @@ jobs:
           
           echo "🚀 Ensamblando Z-LAG OS (${{ matrix.arch }}) con $FINAL_IMG"
           
-          # COMANDO DE ENSAMBLAJE BLINDADO: Evita disparar GCC y recompilaciones pesadas
-          docker run --rm \
+          # COMANDO DE ENSAMBLAJE Y CONVERSIÓN
+          docker run --rm --privileged \
             -v $(pwd)/${{ matrix.binary_path }}:/zlag/bin/z-lag-agent:ro \
             -v $(pwd)/output/${{ matrix.output_subdir }}:/zlag/output/images \
             --entrypoint /bin/bash $FINAL_IMG -c '
               set -e
               
               echo -e "\033[0;34m[1/3] 📥 Inyectando binario en target...\033[0m"
-              # Inyección directa en el sistema de archivos final
               mkdir -p /zlag/output/target/usr/bin
               cp -p /zlag/bin/z-lag-agent /zlag/output/target/usr/bin/z-lag-agent
               chmod +x /zlag/output/target/usr/bin/z-lag-agent
 
-              echo -e "\033[0;34m[2/3] 🔨 Empaquetando imagen (Sin recompilar GCC)...\033[0m"
-              # Forzamos solo el cierre de la imagen. 
-              # El uso de targets específicos evita que Buildroot revise el toolchain (evita Error 143)
+              echo -e "\033[0;34m[2/3] 🔨 Generando empaquetado base...\033[0m"
               if [ "${{ matrix.arch }}" = "x86_64" ]; then
-                make rootfs-iso9660
-                cp /zlag/output/images/rootfs.iso9660 /zlag/output/images/${{ matrix.file_name }}
+                make rootfs-iso9660 || make
+                find /zlag/output/images -maxdepth 1 -type f -name "*.iso*" -exec cp {} /zlag/output/images/${{ matrix.file_name }} \;
               else
-                make rootfs-ext4
-                cp /zlag/output/images/rootfs.ext4 /zlag/output/images/${{ matrix.file_name }}
+                # ARM64: Forzamos la creación del tarball para luego convertirlo a EXT4 real
+                make rootfs-tar || make
+                
+                echo -e "\033[0;33m🔄 Convirtiendo TAR a imagen EXT4 real para Oracle...\033[0m"
+                TAR_FILE=$(find /zlag/output/images -name "rootfs.tar*" | head -n 1)
+                IMG_FILE="/zlag/output/images/${{ matrix.file_name }}"
+                
+                # Crear un disco vacío de 256MB
+                dd if=/dev/zero of=$IMG_FILE bs=1M count=256
+                # Formatear como ext4
+                mkfs.ext4 -F $IMG_FILE
+                
+                # Montar y volcar contenido
+                mkdir -p /tmp/mnt_target
+                mount -o loop $IMG_FILE /tmp/mnt_target
+                tar -xf $TAR_FILE -C /tmp/mnt_target
+                umount /tmp/mnt_target
+                
+                echo -e "\033[0;32m✅ Conversión EXT4 completada.\033[0m"
               fi
 
               echo -e "\033[0;32m[3/3] ✅ Ensamblaje terminado con éxito.\033[0m"
@@ -125,9 +136,6 @@ jobs:
           path: output/${{ matrix.output_subdir }}/
           retention-days: 7
 
-  # ==============================================================================
-  # Job: Release (Publicación automática en GitHub)
-  # ==============================================================================
   create-release:
     needs: assemble
     runs-on: ubuntu-latest
@@ -145,17 +153,8 @@ jobs:
           name: "Z-Lag OS Production - Build #${{ github.run_number }}"
           body: |
             ## 🚀 Z-Lag OS Release (Build #${{ github.run_number }})
-            
-            Imágenes de producción optimizadas para baja latencia y gaming.
-            
-            **📦 Archivos adjuntos:**
-            - **x86_64:** `zlag-vultr-x86_64.iso` (Para Vultr/Proxmox)
-            - **ARM64:** `zlag-oracle-arm64.ext4` (Para Oracle Cloud)
-            
-            **🛠️ Detalles Técnicos:**
-            - Kernel: 6.1.100
-            - Agente: Inyectado dinámicamente en `/usr/bin/z-lag-agent`
-            - Firewall: Pre-heat configurado para `nftables`.
+            - **x86_64:** `zlag-vultr-x86_64.iso`
+            - **ARM64:** `zlag-oracle-arm64.ext4` (Imagen de disco real)
           files: |
             ./artifacts/zlag-vultr-x86_64/*
             ./artifacts/zlag-oracle-arm64/*
