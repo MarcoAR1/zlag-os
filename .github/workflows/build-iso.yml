@@ -10,6 +10,9 @@ on:
   workflow_dispatch:
 
 jobs:
+  # ==============================================================================
+  # Job Único: Ensamblaje Final (Inyección y Generación de ISO/Imagen)
+  # ==============================================================================
   assemble:
     name: Assemble ISO/Image
     runs-on: ubuntu-latest
@@ -46,6 +49,7 @@ jobs:
       - name: Calculate Config Hash
         id: config-hash
         run: |
+          # Hash consistente para sincronizar local y CI
           HASH=$(find buildroot/scripts buildroot/configs buildroot/board -type f -print0 | sort -z | xargs -0 cat | sha256sum | head -c 16)
           echo "hash=${HASH}" >> $GITHUB_OUTPUT
 
@@ -64,38 +68,42 @@ jobs:
           
           BASE_IMG="ghcr.io/${OWNER_LC}/zlag-compiled-${{ matrix.arch }}"
           
+          # Preparar directorio de salida local mapeado hacia el host
           mkdir -p "output/${{ matrix.output_subdir }}"
           
           if docker pull "${BASE_IMG}:${CALCULATED_HASH}"; then
             FINAL_IMG="${BASE_IMG}:${CALCULATED_HASH}"
+            echo "✅ Imagen con hash actualizado encontrada."
           else
             echo "⚠️ Bypass: Usando imagen estable (${KNOWN_GOOD_HASH})"
             FINAL_IMG="${BASE_IMG}:${KNOWN_GOOD_HASH}"
             docker pull "$FINAL_IMG"
           fi
           
+          echo "🚀 Ensamblando Z-LAG OS (${{ matrix.arch }}) con $FINAL_IMG"
+          
           # Inyectamos el binario y cerramos la imagen sin recompilar nada más
+          # Mapeamos la subcarpeta específica para evitar que el upload falle
           docker run --rm \
             -v $(pwd)/${{ matrix.binary_path }}:/zlag/bin/z-lag-agent:ro \
             -v $(pwd)/output/${{ matrix.output_subdir }}:/zlag/output/images \
             --entrypoint /bin/bash $FINAL_IMG -c '
               set -e
               echo -e "\033[0;34m[1/2] 📦 Inyectando binario en target...\033[0m"
-              # Inyectamos directamente en el directorio target para evitar el paso de overlay si no es necesario
               mkdir -p /zlag/output/target/usr/bin
               cp -p /zlag/bin/z-lag-agent /zlag/output/target/usr/bin/z-lag-agent
               chmod +x /zlag/output/target/usr/bin/z-lag-agent
 
               echo -e "\033[0;34m[2/2] 🔨 Cerrando imagen (Fast Assemble)...\033[0m"
-              # Forzamos solo el empaquetado final. -j2 para evitar error 143 (OOM)
-              # Eliminamos los stamps de las imágenes para que detecte que debe re-generarlas
+              # Eliminamos los stamps para forzar el re-empaquetado sin recompilar el kernel
               rm -f /zlag/output/build/.stamp_images_installed
               
+              # Finalizamos el target y empaquetamos
               make target-finalize
               make rootfs-iso9660 rootfs-ext4 2>/dev/null || make
 
               echo -e "\033[0;32m✅ Renombrando a ${{ matrix.file_name }}...\033[0m"
-              # Buscamos el archivo generado y lo movemos con el nombre final
+              # Buscamos el archivo generado y lo movemos con el nombre final al volumen montado
               find /zlag/output/images -maxdepth 1 -type f \( -name "*.iso*" -o -name "*.ext*" \) -exec cp {} /zlag/output/images/${{ matrix.file_name }} \;
             '
 
@@ -115,9 +123,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
+          # Path corregido para usar la subcarpeta de la matriz
           path: output/${{ matrix.output_subdir }}/
           retention-days: 7
 
+  # ==============================================================================
+  # Job: Release (Generación de versión oficial con archivos adjuntos)
+  # ==============================================================================
   create-release:
     needs: assemble
     runs-on: ubuntu-latest
@@ -135,8 +147,16 @@ jobs:
           name: "Z-Lag OS - Build #${{ github.run_number }}"
           body: |
             ## 🚀 Z-Lag OS Release (Build #${{ github.run_number }})
+            
+            **📦 Imágenes Generadas:**
             - **Vultr (x86_64):** `zlag-vultr-x86_64.iso`
             - **Oracle (ARM64):** `zlag-oracle-arm64.ext4`
-          files: ./artifacts/zlag-*/*
+            
+            **Información Técnica:**
+            - Agente inyectado en `/usr/bin/z-lag-agent`.
+            - Kernel 6.1 optimizado para baja latencia.
+          files: |
+            ./artifacts/zlag-vultr-x86_64/*
+            ./artifacts/zlag-oracle-arm64/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
