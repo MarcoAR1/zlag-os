@@ -64,7 +64,7 @@ jobs:
   build-compiled-image:
     needs: build-base-image
     runs-on: ubuntu-latest
-    timeout-minutes: 120 # Compilar el Kernel toma tiempo
+    timeout-minutes: 120
     permissions:
       contents: read
       packages: write
@@ -91,8 +91,8 @@ jobs:
       - name: Calculate Config Hash
         id: config-hash
         run: |
-          # Hash consistente para evitar desincronización
-          HASH=$(find buildroot/scripts buildroot/configs buildroot/board -type f -print0 | sort -z | xargs -0 cat | sha256sum | head -c 16)
+          # Incluimos Dockerfile.compiled en el hash para re-compilar si cambia la lógica de build
+          HASH=$(find buildroot/scripts buildroot/configs buildroot/board Dockerfile.compiled -type f -print0 | sort -z | xargs -0 cat | sha256sum | head -c 16)
           echo "hash=${HASH}" >> $GITHUB_OUTPUT
 
       - name: Set Docker Metadata
@@ -125,12 +125,12 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ==============================================================================
-  # Job 3: Final Assembly (Bypass Inteligente & ISO Generation)
+  # Job 3: Final Assembly (Inyección de Binarios Específicos)
   # ==============================================================================
   assemble-final-iso:
     needs: build-compiled-image
     runs-on: ubuntu-latest
-    timeout-minutes: 60 # Extendido para extracciones pesadas de Docker
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
@@ -140,8 +140,10 @@ jobs:
         include:
           - arch: x86_64
             artifact_name: zlag-vultr-x86_64
+            binary_src: bin/z-lag-agent-x86_64
           - arch: arm64
             artifact_name: zlag-oracle-arm64
+            binary_src: bin/z-lag-agent-arm64
 
     steps:
       - name: Checkout Code
@@ -157,35 +159,32 @@ jobs:
       - name: Calculate Hash
         id: config-hash
         run: |
-          HASH=$(find buildroot/scripts buildroot/configs buildroot/board -type f -print0 | sort -z | xargs -0 cat | sha256sum | head -c 16)
+          HASH=$(find buildroot/scripts buildroot/configs buildroot/board Dockerfile.compiled -type f -print0 | sort -z | xargs -0 cat | sha256sum | head -c 16)
           echo "hash=${HASH}" >> $GITHUB_OUTPUT
 
       - name: Assemble Final ISO
         run: |
           OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           CALCULATED_HASH="${{ steps.config-hash.outputs.hash }}"
-          KNOWN_GOOD_HASH="8188e8307c1eebca" # Bypass histórico para estabilidad
+          KNOWN_GOOD_HASH="8188e8307c1eebca"
           
           BASE_IMG="ghcr.io/${OWNER_LC}/zlag-compiled-${{ matrix.arch }}"
           
-          echo "🔍 Buscando imagen de compilación..."
-          
+          # Lógica de fallback para evitar que el pipeline muera por desincronización
           if docker pull "${BASE_IMG}:${CALCULATED_HASH}"; then
             FINAL_IMG="${BASE_IMG}:${CALCULATED_HASH}"
-            echo "✅ Usando imagen calculada: $FINAL_IMG"
           else
-            echo "⚠️ Hash $CALCULATED_HASH no encontrado. Aplicando Bypass con $KNOWN_GOOD_HASH..."
+            echo "⚠️ Hash calculado no encontrado, usando bypass estable..."
             FINAL_IMG="${BASE_IMG}:${KNOWN_GOOD_HASH}"
             docker pull "$FINAL_IMG"
           fi
           
           mkdir -p output/images
           
-          echo "⚡ Iniciando ensamblaje para ${{ matrix.arch }}..."
-          
-          # Inyectamos binarios y generamos ISO
+          # Inyectamos el binario específico de la arquitectura
+          # El contenedor lo espera en /zlag/bin/z-lag-agent vía entrypoint
           docker run --rm \
-            -v $(pwd)/bin:/zlag/bin:ro \
+            -v $(pwd)/${{ matrix.binary_src }}:/zlag/bin/z-lag-agent:ro \
             -v $(pwd)/output/images:/zlag/output/images \
             $FINAL_IMG
 
