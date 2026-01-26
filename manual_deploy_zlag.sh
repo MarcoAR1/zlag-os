@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# 🚀 ZLAG MANUAL DEPLOYER (Modo Ahorro de Disco)
+# 🚀 ZLAG MANUAL DEPLOYER (Modo Ahorro de Disco & Hash Sincronizado)
 # ==============================================================================
 set -e
 
@@ -27,59 +27,63 @@ docker build -f Dockerfile.base -t $BASE_IMAGE .
 echo -e "${GREEN}Subiendo Base a GHCR...${NC}"
 docker push $BASE_IMAGE
 
-# 2. CALCULAR HASH DE CONFIGURACIÓN
+# 2. CALCULAR HASH DE CONFIGURACIÓN (Sincronizado con GitHub)
 # ------------------------------------------------------------------------------
 echo -e "\n${GREEN}[2/3] Calculando Hash Único de Configuración...${NC}"
 
-HASH_SOURCE="buildroot/scripts/ Dockerfile.compiled"
+# Definimos las fuentes exactas que afectan la compilación
+HASH_SOURCE="buildroot/scripts buildroot/configs buildroot/board Dockerfile.compiled"
 
-if [ ! -d "buildroot/scripts" ]; then
-    echo "❌ Error: No encuentro la carpeta 'buildroot/scripts'."
-    exit 1
-fi
+# Verificación de carpetas antes de calcular
+for item in $HASH_SOURCE; do
+    if [ ! -e "$item" ]; then
+        echo -e "${RED}❌ Error: No se encuentra '$item'. Revisa tu estructura de carpetas.${NC}"
+        exit 1
+    fi
+done
 
+# Generamos el Hash de 16 caracteres (Igual que en el .yml)
 HASH=$(find $HASH_SOURCE -type f -print0 | sort -z | xargs -0 cat | sha256sum | head -c 16)
 
-echo -e "   Fuentes analizadas: $HASH_SOURCE"
+echo -e "   Fuentes analizadas correctamente."
 echo -e "🔑 Hash generado: ${BLUE}$HASH${NC}"
 
-# 3. CONSTRUIR KERNELS (UNO POR UNO Y LIMPIANDO)
+# 3. CONSTRUIR KERNELS (Bucle secuencial con limpieza inmediata)
 # ------------------------------------------------------------------------------
 build_kernel_and_clean() {
     ARCH=$1
     FULL_TAG="ghcr.io/$USERNAME/zlag-compiled-$ARCH:$HASH"
     
     echo -e "\n${BLUE}------------------------------------------------------------${NC}"
-    echo -e "${GREEN}[3/3] Procesando Kernel $ARCH...${NC}"
+    echo -e "${GREEN}[3/3] Procesando Arquitectura: ${YELLOW}$ARCH${NC}"
     echo -e "🏷️  Tag: $FULL_TAG"
     
     # A. CONSTRUIR
-    echo -e "${YELLOW}🔨 Compilando (Esto ocupará espacio temporalmente)...${NC}"
+    echo -e "${YELLOW}🔨 Compilando... (Asegúrate de tener ~30GB libres)${NC}"
     docker build -f Dockerfile.compiled \
         --build-arg BASE_IMAGE=$BASE_IMAGE \
         --build-arg ARCH=$ARCH \
         -t $FULL_TAG .
         
     # B. SUBIR
-    echo -e "${GREEN}☁️  Subiendo Kernel $ARCH a GHCR...${NC}"
+    echo -e "${GREEN}☁️  Subiendo imagen compilada a GHCR...${NC}"
     docker push $FULL_TAG
 
-    # C. LIMPIEZA AGRESIVA (La Clave para tu disco)
-    echo -e "${YELLOW}🧹 LIMPIEZA DE EMERGENCIA: Borrando imagen local $ARCH...${NC}"
+    # C. LIMPIEZA DE DISCO (Vital para tu WSL)
+    echo -e "${YELLOW}🧹 Liberando espacio: Borrando imagen local $ARCH...${NC}"
     docker rmi $FULL_TAG
     
-    echo -e "${YELLOW}🧹 LIMPIEZA DE CACHÉ: Borrando capas de compilación intermedias...${NC}"
-    # Esto borra el caché del build (los archivos .o gigantes) pero mantiene la imagen base
+    echo -e "${YELLOW}🧹 Purgando caché de construcción...${NC}"
     docker builder prune -f
     
-    echo -e "${GREEN}✅ Espacio recuperado. Listo para la siguiente arquitectura.${NC}"
+    echo -e "${GREEN}✅ Ciclo completado para $ARCH. Espacio recuperado.${NC}"
 }
 
-# Ejecutamos secuencialmente con limpieza intermedia
+# Ejecución secuencial
 build_kernel_and_clean "x86_64"
 build_kernel_and_clean "arm64"
 
 echo -e "\n${BLUE}============================================================${NC}"
-echo -e "${BLUE} 🎉 ÉXITO: Cache subido para el Hash $HASH${NC}"
-echo -e "${BLUE}    Tu disco debería estar casi igual que al principio.${NC}"
+echo -e "${BLUE} 🎉 ÉXITO TOTAL: Kernels subidos con el Hash $HASH${NC}"
+echo -e "${BLUE}    Ahora el Workflow de ISOs reconocerá este hash automáticamente.${NC}"
 echo -e "${BLUE}============================================================${NC}"
