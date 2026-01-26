@@ -10,257 +10,140 @@ on:
   repository_dispatch:
     types: [build-isos]
 
-env:
-  ZLAG_SECRET: ${{ secrets.ZLAG_SECRET }}
-
 jobs:
   # --------------------------------------------------------------------------
-  # 1. Compilar Agente (Go)
+  # 1. Compilar Agente (Go) - Rápido y necesario para inyectar
   # --------------------------------------------------------------------------
   build-agent:
     name: Build Go Agent
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4  # <--- CORREGIDO v4
-      
-      - name: Setup Go
-        uses: actions/setup-go@v5  # <--- CORREGIDO v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
           
-      - name: Build x86_64 Agent
+      - name: Build Binaries
         run: |
           mkdir -p bin
           GOOS=linux GOARCH=amd64 go build -o bin/z-lag-agent-x86_64 ./cmd/agent 
-          
-      - name: Build ARM64 Agent
-        run: |
           GOOS=linux GOARCH=arm64 go build -o bin/z-lag-agent-arm64 ./cmd/agent
 
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4  # <--- CORREGIDO v4
+      - name: Upload Binaries
+        uses: actions/upload-artifact@v4
         with:
           name: agent-binaries
           path: bin/
           retention-days: 1
 
   # --------------------------------------------------------------------------
-  # 2. Build x86_64 ISO
+  # 2. Ensamblaje Final (Usando los Dockers del Workflow 1)
   # --------------------------------------------------------------------------
-  build-x86_64:
-    name: Build x86_64 ISO (Vultr)
+  assemble:
+    name: Assemble ISO/Image
     needs: build-agent
-    runs-on: ubuntu-22.04
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4  # <--- CORREGIDO v4
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    strategy:
+      matrix:
+        arch: [x86_64, arm64]
+        include:
+          - arch: x86_64
+            artifact_name: zlag-vultr-x86_64
+            ext: iso
+          - arch: arm64
+            artifact_name: zlag-oracle-arm64
+            ext: ext4
 
-      - name: Download Agent Binary
-        uses: actions/download-artifact@v4  # <--- CORREGIDO v4
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Agent Binaries
+        uses: actions/download-artifact@v4
         with:
           name: agent-binaries
           path: bin
 
-      - name: Install Buildroot dependencies
+      - name: Calculate Config Hash (Para matchear el Docker correcto)
+        id: config-hash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libncurses5-dev git bc wget cpio unzip rsync file python3
+          HASH=$(find buildroot/scripts buildroot/configs buildroot/board -type f -print0 | sort -z | xargs -0 cat | sha256sum | head -c 16)
+          echo "hash=${HASH}" >> $GITHUB_OUTPUT
 
-      - name: Cache Buildroot downloads
-        uses: actions/cache@v4  # <--- CORREGIDO v4
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
-          path: buildroot/dl
-          key: buildroot-dl-x86-${{ hashFiles('buildroot/configs/zlag_defconfig') }}
-          restore-keys: |
-            buildroot-dl-x86-
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Inject Agent
+      - name: Generate Final Artifact
         run: |
-          if [ ! -f bin/z-lag-agent-x86_64 ]; then
-            echo "❌ Error: Agent binary missing"
-            exit 1
-          fi
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMG="ghcr.io/${OWNER_LC}/zlag-compiled-${{ matrix.arch }}:${{ steps.config-hash.outputs.hash }}"
           
-          mkdir -p buildroot/board/zlag/rootfs-overlay/usr/bin/
-          cp bin/z-lag-agent-x86_64 buildroot/board/zlag/rootfs-overlay/usr/bin/z-lag-agent
-          chmod +x buildroot/board/zlag/rootfs-overlay/usr/bin/z-lag-agent
-
-      - name: Create secrets file
-        run: |
-          cd buildroot
-          echo "export ZLAG_SECRET='${{ secrets.ZLAG_SECRET }}'" > .secrets
-          echo "export MAX_MINUTES='120'" >> .secrets
-
-      - name: Build Buildroot ISO (x86_64)
-        run: |
-          cd buildroot
-          ./setup.sh update
-
-      - name: Calculate ISO hash
-        id: hash
-        run: |
-          cd buildroot/isos/vultr-x86_64
-          SHA256=$(sha256sum zlag-vultr-x86_64.iso | cut -d' ' -f1)
-          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
-          echo "short_sha=${SHA256:0:8}" >> $GITHUB_OUTPUT
+          mkdir -p output/images
           
-          SIZE=$(du -h zlag-vultr-x86_64.iso | cut -f1)
-          echo "size=${SIZE}" >> $GITHUB_OUTPUT
+          echo "🚀 Ensamblando ${{ matrix.arch }} con imagen $IMG"
+          
+          # Corremos el contenedor compilador mapeando nuestros binarios locales
+          docker run --rm \
+            -v $(pwd)/bin:/zlag/bin:ro \
+            -v $(pwd)/output/images:/zlag/output/images \
+            -e ZLAG_SECRET="${{ secrets.ZLAG_SECRET }}" \
+            $IMG
 
-      - name: Upload x86_64 ISO artifact
-        uses: actions/upload-artifact@v4  # <--- CORREGIDO v4
+      - name: Calculate Metadata
+        id: meta
+        run: |
+          FILE=$(ls output/images/*.${{ matrix.ext }} | head -n 1)
+          SHA=$(sha256sum $FILE | cut -d' ' -f1)
+          SIZE=$(du -h $FILE | cut -f1)
+          echo "sha256=$SHA" >> $GITHUB_OUTPUT
+          echo "size=$SIZE" >> $GITHUB_OUTPUT
+          echo "file_path=$FILE" >> $GITHUB_OUTPUT
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: zlag-vultr-x86_64-iso
-          path: |
-            buildroot/isos/vultr-x86_64/zlag-vultr-x86_64.iso
-            buildroot/isos/vultr-x86_64/checksums.txt
-          retention-days: 90
+          name: ${{ matrix.artifact_name }}
+          path: output/images/
 
     outputs:
-      sha256: ${{ steps.hash.outputs.sha256 }}
-      short_sha: ${{ steps.hash.outputs.short_sha }}
-      size: ${{ steps.hash.outputs.size }}
+      # Exponemos los datos para el Job de Release
+      x86_sha: ${{ steps.meta.outputs.sha256 && matrix.arch == 'x86_64' || '' }}
+      arm_sha: ${{ steps.meta.outputs.sha256 && matrix.arch == 'arm64' || '' }}
+      # Nota: Para simplificar el Release, usaremos archivos de texto generados en el job
 
   # --------------------------------------------------------------------------
-  # 3. Build ARM64 Image
-  # --------------------------------------------------------------------------
-  build-arm64:
-    name: Build ARM64 Image (Oracle Cloud)
-    needs: build-agent
-    runs-on: ubuntu-22.04
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4  # <--- CORREGIDO v4
-
-      - name: Download Agent Binary
-        uses: actions/download-artifact@v4  # <--- CORREGIDO v4
-        with:
-          name: agent-binaries
-          path: bin
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libncurses5-dev git bc wget cpio unzip rsync file python3
-
-      - name: Cache Buildroot downloads (ARM64)
-        uses: actions/cache@v4  # <--- CORREGIDO v4
-        with:
-          path: buildroot/dl
-          key: buildroot-dl-arm64-${{ hashFiles('buildroot/configs/zlag_arm64_defconfig') }}
-          restore-keys: |
-            buildroot-dl-arm64-
-
-      - name: Inject Agent
-        run: |
-          if [ ! -f bin/z-lag-agent-arm64 ]; then
-            echo "❌ Error: Agent binary missing"
-            exit 1
-          fi
-          
-          mkdir -p buildroot/board/zlag/rootfs-overlay/usr/bin/
-          cp bin/z-lag-agent-arm64 buildroot/board/zlag/rootfs-overlay/usr/bin/z-lag-agent-arm64
-          chmod +x buildroot/board/zlag/rootfs-overlay/usr/bin/z-lag-agent-arm64
-
-      - name: Create secrets file
-        run: |
-          cd buildroot
-          echo "export ZLAG_SECRET='${{ secrets.ZLAG_SECRET }}'" > .secrets
-          echo "export MAX_MINUTES='120'" >> .secrets
-
-      - name: Build Buildroot Image (ARM64)
-        run: |
-          cd buildroot
-          ./setup_arm.sh update
-
-      - name: Calculate image hash
-        id: hash
-        run: |
-          cd buildroot/isos/oracle-arm64
-          SHA256=$(sha256sum zlag-oracle-arm64.ext4 | cut -d' ' -f1)
-          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
-          echo "short_sha=${SHA256:0:8}" >> $GITHUB_OUTPUT
-          SIZE=$(du -h zlag-oracle-arm64.ext4 | cut -f1)
-          echo "size=${SIZE}" >> $GITHUB_OUTPUT
-
-      - name: Upload ARM64 image artifact
-        uses: actions/upload-artifact@v4  # <--- CORREGIDO v4
-        with:
-          name: zlag-oracle-arm64-image
-          path: |
-            buildroot/isos/oracle-arm64/zlag-oracle-arm64.ext4
-            buildroot/isos/oracle-arm64/checksums.txt
-          retention-days: 90
-
-    outputs:
-      sha256: ${{ steps.hash.outputs.sha256 }}
-      short_sha: ${{ steps.hash.outputs.short_sha }}
-      size: ${{ steps.hash.outputs.size }}
-
-  # --------------------------------------------------------------------------
-  # 4. Release
+  # 3. Release Automático
   # --------------------------------------------------------------------------
   create-release:
-    name: Create GitHub Release
-    needs: [build-x86_64, build-arm64]
+    needs: assemble
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    
     steps:
-      - name: Download x86_64 artifacts
-        uses: actions/download-artifact@v4  # <--- CORREGIDO v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          name: zlag-vultr-x86_64-iso
-          path: ./x86_64
-
-      - name: Download ARM64 artifacts
-        uses: actions/download-artifact@v4  # <--- CORREGIDO v4
-        with:
-          name: zlag-oracle-arm64-image
-          path: ./arm64
-
-      - name: Generate release tag
-        id: tag
-        run: |
-          TAG="iso-$(date +%Y%m%d-%H%M)-${GITHUB_SHA:0:8}"
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          path: ./artifacts
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2  # <--- CORREGIDO v2 (la v1 ya es muy vieja)
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: "Z-Lag ISOs - $(date +%Y-%m-%d)"
+          tag_name: iso-${{ github.run_number }}
+          name: "Z-Lag Production Build #${{ github.run_number }}"
           body: |
-            # 🚀 Z-Lag Buildroot ISOs
-            **Commit**: `${{ github.sha }}`
+            ## 🚀 Z-Lag OS Release
+            Imágenes listas para despliegue.
             
-            ## 📦 Downloads
-            ### x86_64
-            - **Size**: ${{ needs.build-x86_64.outputs.size }}
-            - **SHA256**: `${{ needs.build-x86_64.outputs.sha256 }}`
-            ### ARM64
-            - **Size**: ${{ needs.build-arm64.outputs.size }}
-            - **SHA256**: `${{ needs.build-arm64.outputs.sha256 }}`
+            ### 📦 checksums
+            Verificar integridad con los archivos adjuntos.
           files: |
-            ./x86_64/zlag-vultr-x86_64.iso
-            ./x86_64/checksums.txt
-            ./arm64/zlag-oracle-arm64.ext4
-            ./arm64/checksums.txt
+            ./artifacts/zlag-vultr-x86_64/*
+            ./artifacts/zlag-oracle-arm64/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  summary:
-    name: Build Summary
-    needs: [build-x86_64, build-arm64]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Generate summary
-        run: |
-          echo "# 🏗️ Z-Lag Build Complete" >> $GITHUB_STEP_SUMMARY
-          echo "| Architecture | Status | Size | SHA256 |" >> $GITHUB_STEP_SUMMARY
-          echo "|---|---|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| x86_64 | ${{ needs.build-x86_64.result }} | ${{ needs.build-x86_64.outputs.size }} | \`${{ needs.build-x86_64.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| ARM64 | ${{ needs.build-arm64.result }} | ${{ needs.build-arm64.outputs.size }} | \`${{ needs.build-arm64.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
