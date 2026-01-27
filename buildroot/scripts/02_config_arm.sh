@@ -167,6 +167,13 @@ BR2_TARGET_ROOTFS_SQUASHFS=y
 BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
 BR2_TARGET_ROOTFS_SQUASHFS4_XZ_EXTREME=y
 BR2_TARGET_ROOTFS_TAR_GZIP=y
+
+# --- [FIX] ACTIVACIÓN DE EXT4 (256MB) ---
+BR2_TARGET_ROOTFS_EXT2=y
+BR2_TARGET_ROOTFS_EXT2_4=y
+BR2_TARGET_ROOTFS_EXT2_SIZE="256M"
+# ----------------------------------------
+
 BR2_TARGET_GRUB2=y
 BR2_TARGET_GRUB2_ARM64_EFI=y
 BR2_TARGET_GRUB2_BOOT_PARTITION="eltorito"
@@ -367,11 +374,12 @@ configfile /boot/grub/grub.cfg
 EOF
 
     # NOTA IMPORTANTE: En ARM64 (Oracle Cloud), la consola serial suele ser ttyAMA0
+    # Agregamos root=/dev/vda para asegurar arranque en Cloud
     cat <<EOF > board/zlag/menu.cfg
 set default=0
 set timeout=3
 menuentry "Z-Lag OS (Oracle ARM64)" {
-    linux /Image console=ttyAMA0,115200 console=tty0 quiet panic=10 clocksource=arch_sys_counter
+    linux /Image console=ttyAMA0,115200 console=tty0 root=/dev/vda rw quiet panic=10 clocksource=arch_sys_counter
 }
 EOF
 }

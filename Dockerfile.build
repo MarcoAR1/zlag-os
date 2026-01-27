@@ -1,78 +1,59 @@
 # ==============================================================================
-# 🚀 zlag OS - Compilador de Kernel y Sistema (Smart Cache Edition)
+# 🚀 ZLAG OS - Monolithic Build System (i5-13600KF Optimized)
 # ==============================================================================
-# Esta imagen toma la base de zlag y compila el "esqueleto" del SO.
-# ==============================================================================
-
 ARG BASE_IMAGE=ghcr.io/marcoar1/zlag-base:v1
 FROM ${BASE_IMAGE}
 
-# Recibimos la arquitectura (x86_64 o arm64) desde el Workflow
 ARG ARCH
-ENV TARGET_ARCH=${ARCH}
+ENV ZLAG_ARCH=${ARCH}
 ENV TERM=linux
 
 USER root
-
-# ==============================================================================
-# 📦 Sincronización de Fuentes y Configuración
-# ==============================================================================
 WORKDIR /zlag
 
-# Copiar solo lo necesario para configurar el Kernel y Buildroot
-# Asegúrate de que estas carpetas existan en tu contexto de build
-COPY buildroot/scripts/ ./scripts/
-COPY buildroot/configs/ ./configs/
-COPY buildroot/board/zlag/ ./board/zlag/ 
-COPY buildroot/*.sh ./
+# 1. Preparación de Archivos (Sincronización Total)
+# ------------------------------------------------------------------------------
+# Copiamos las carpetas desde la raíz del proyecto
+COPY buildroot/ ./buildroot/
+COPY bin/ ./bin/
 
-# Asegurar permisos para el usuario builder de la imagen base
-RUN chmod +x *.sh scripts/*.sh && \
-    chown -R zlag-builder:zlag-builder /zlag
+# Aplanamos la estructura para que los scripts encuentren todo en /zlag/
+RUN mv ./buildroot/* ./ && \
+    mkdir -p /zlag/bin_agents && \
+    cp ./bin/z-lag-agent-* /zlag/bin_agents/ && \
+    chown -R zlag-builder:zlag-builder /zlag && \
+    chmod +x /zlag/scripts/*.sh 2>/dev/null || true
 
-# ==============================================================================
-# 🔨 Compilación del "Esqueleto" (Kernel + Toolchain)
-# ==============================================================================
+# 2. Compilación e Inyección
+# ------------------------------------------------------------------------------
 USER zlag-builder
+SHELL ["/bin/bash", "-c"]
 
 RUN set -e && \
     source scripts/00_env.sh && \
     source scripts/01_deps.sh && \
-    if [ "${TARGET_ARCH}" = "x86_64" ]; then \
-        echo "🔨 Compilando base x86_64..." && \
-        source scripts/02_config.sh && \
-        configure_system && \
-        make zlag_defconfig && \
-        make -j$(nproc); \
-    elif [ "${TARGET_ARCH}" = "arm64" ]; then \
-        echo "🔨 Compilando base ARM64..." && \
+    \
+    if [ "${ZLAG_ARCH}" = "arm64" ]; then \
+        echo "[⚙️] Configurando ARM64..." && \
         source scripts/02_config_arm.sh && \
         configure_system_arm && \
-        make zlag_arm64_defconfig && \
-        make -j$(nproc); \
-    fi
+        make zlag_arm64_defconfig; \
+    elif [ "${ZLAG_ARCH}" = "x86_64" ]; then \
+        echo "[⚙️] Configurando x86_64..." && \
+        source scripts/02_config.sh && \
+        configure_system && \
+        make zlag_defconfig; \
+    fi && \
+    \
+    # Inyección del agente antes del build final
+    echo "[📥] Inyectando agente Z-Lag para ${ZLAG_ARCH}..." && \
+    mkdir -p output/target/usr/bin && \
+    cp /zlag/bin_agents/z-lag-agent-${ZLAG_ARCH} output/target/usr/bin/z-lag-agent && \
+    chmod +x output/target/usr/bin/z-lag-agent && \
+    \
+    # COMPILACIÓN TOTAL (A darle átomos con 20 hilos)
+    echo "[🔨] Iniciando compilación total de Buildroot..." && \
+    make -j$(nproc)
 
-# ==============================================================================
-# 🧹 Limpieza Quirúrgica (Ahorro de espacio en imagen final)
-# ==============================================================================
-RUN rm -rf dl/* && \
-    find output/build -name "*.o" -delete && \
-    rm -rf output/build/host-*
-
-# ==============================================================================
-# 🚀 Entrypoint para Inyección y Ensamblaje
-# ==============================================================================
-USER root
-# Asegúrate de tener este archivo en la raíz de tu proyecto
-COPY docker-build-entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
-
-# ==============================================================================
-# METADATA Y VINCULACIÓN CON GITHUB
-# ==============================================================================
 LABEL org.opencontainers.image.source="https://github.com/marcoar1/zlag-os"
-LABEL org.opencontainers.image.title="zlag OS Compiled Kernel"
-LABEL org.opencontainers.image.description="Pre-compiled kernel and toolchain for zlag OS nodes"
-
-USER zlag-builder
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["/bin/bash"]

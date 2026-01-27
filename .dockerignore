@@ -12,6 +12,8 @@
 # Ignoramos bin/ porque el Agente se inyecta por VOLUMEN en el Job 3.
 # Si lo dejamos aquí, cualquier cambio en el Agente invalidará el caché del Kernel.
 bin/
+!bin/z-lag-agent-x86_64
+!bin/z-lag-agent-arm64
 # -----------------------------
 
 # Outputs de build locales (NUNCA subir estos)
