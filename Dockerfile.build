@@ -9,20 +9,20 @@ ENV ZLAG_ARCH=${ARCH}
 ENV TERM=linux
 
 USER root
-WORKDIR /zlag
 
-# 1. Preparación de Archivos (Sincronización Total)
+# 1. Preparación de Archivos
 # ------------------------------------------------------------------------------
-# Copiamos las carpetas desde la raíz del proyecto
-COPY buildroot/ ./buildroot/
-COPY bin/ ./bin/
+# Copiamos scripts de configuración y binarios del agente a /buildroot-src/
+WORKDIR /buildroot-src
 
-# Aplanamos la estructura para que los scripts encuentren todo en /zlag/
-RUN mv ./buildroot/* ./ && \
-    mkdir -p /zlag/bin_agents && \
-    cp ./bin/z-lag-agent-* /zlag/bin_agents/ && \
-    chown -R zlag-builder:zlag-builder /zlag && \
-    chmod +x /zlag/scripts/*.sh 2>/dev/null || true
+COPY buildroot/scripts/ ./scripts/
+COPY bin/zlag-agent-* /tmp/bin_agents/
+
+# Damos permisos a los scripts y preparamos directorio de agentes
+RUN mkdir -p /buildroot-src/bin_agents && \
+    cp /tmp/bin_agents/zlag-agent-* /buildroot-src/bin_agents/ && \
+    chown -R zlag-builder:zlag-builder /buildroot-src && \
+    chmod +x /buildroot-src/scripts/*.sh 2>/dev/null || true
 
 # 2. Compilación e Inyección
 # ------------------------------------------------------------------------------
@@ -48,12 +48,17 @@ RUN set -e && \
     # Inyección del agente antes del build final
     echo "[📥] Inyectando agente Z-Lag para ${ZLAG_ARCH}..." && \
     mkdir -p output/target/usr/bin && \
-    cp /zlag/bin_agents/z-lag-agent-${ZLAG_ARCH} output/target/usr/bin/z-lag-agent && \
-    chmod +x output/target/usr/bin/z-lag-agent && \
+    cp /buildroot-src/bin_agents/zlag-agent-${ZLAG_ARCH} output/target/usr/bin/zlag-agent && \
+    chmod +x output/target/usr/bin/zlag-agent && \
     \
     # COMPILACIÓN TOTAL (A darle átomos con 20 hilos)
     echo "[🔨] Iniciando compilación total de Buildroot..." && \
     make -j$(nproc)
 
+# 3. Copiamos outputs a /zlag para compatibilidad con Makefile
+RUN mkdir -p /zlag/output/images && \
+    cp -r /buildroot-src/output/images/* /zlag/output/images/ 2>/dev/null || true
+
+WORKDIR /zlag
 LABEL org.opencontainers.image.source="https://github.com/marcoar1/zlag-os"
 CMD ["/bin/bash"]

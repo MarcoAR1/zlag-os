@@ -133,7 +133,7 @@ EOF
 BR2_aarch64=y
 BR2_cortex_a72=y
 BR2_CCACHE=y
-BR2_CCACHE_DIR="/buildroot/dl/ccache"
+BR2_CCACHE_DIR="/buildroot-src/dl/ccache"
 BR2_CCACHE_USE_BASEDIR=y
 BR2_JLEVEL=0
 BR2_TOOLCHAIN_BUILDROOT=y
@@ -193,6 +193,10 @@ rm -rf ${TARGET_DIR}/var/run
 ln -snf ../run ${TARGET_DIR}/var/run
 mkdir -p ${TARGET_DIR}/boot/grub ${TARGET_DIR}/usr/bin ${TARGET_DIR}/sbin
 cp board/zlag/menu.cfg ${TARGET_DIR}/boot/grub/grub.cfg
+
+# === FIX: Usar busybox ip en lugar de iproute2 ip (evita dep libelf) ===
+rm -f ${TARGET_DIR}/sbin/ip 2>/dev/null || true
+ln -sf /bin/busybox ${TARGET_DIR}/sbin/ip
 
 # === LIMPIEZA DE INIT ===
 echo "🧹 Limpiando scripts init default..."
@@ -317,10 +321,10 @@ fi
 
 # === INICIO DEL AGENTE Z-Lag ===
 echo "🚀 Iniciando Z-Lag Agent (ARM64)..."
-if [ -f "/usr/bin/z-lag-agent" ]; then
-    /usr/bin/z-lag-agent &
+if [ -f "/usr/bin/zlag-agent" ]; then
+    /usr/bin/zlag-agent &
 else
-    echo "❌ Error: Binario z-lag-agent no encontrado"
+    echo "❌ Error: Binario zlag-agent no encontrado"
 fi
 
 exec /sbin/init
@@ -358,7 +362,7 @@ DHCPEOF
 chmod +x ${TARGET_DIR}/usr/share/udhcpc/default.script
 
 # Permisos y Hostname
-[ -f "${TARGET_DIR}/usr/bin/z-lag-agent" ] && chmod +x ${TARGET_DIR}/usr/bin/z-lag-agent
+[ -f "${TARGET_DIR}/usr/bin/zlag-agent" ] && chmod +x ${TARGET_DIR}/usr/bin/zlag-agent
 echo "zlag-oracle-arm64" > ${TARGET_DIR}/etc/hostname
 echo "✓ Post-build ARM64 completado"
 EOF
