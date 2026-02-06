@@ -6,9 +6,9 @@
 # Función unificada para copiar el binario pre-compilado
 install_prebuilt_agent() {
     local ARCH=$1  # Recibe "arm64" o "x86_64"
-    local BIN_NAME="z-lag-agent-${ARCH}"
+    local BIN_NAME="zlag-agent-${ARCH}"
     local DEST_DIR="board/zlag/rootfs-overlay/usr/bin"
-    local DEST_FILE="${DEST_DIR}/z-lag-agent" # Nombre final dentro del OS
+    local DEST_FILE="${DEST_DIR}/zlag-agent" # Nombre final dentro del OS - MUST match init script!
 
     # Detección inteligente de la ruta del binario
     # 1. Prioridad: Entorno Docker (GitHub Actions)
