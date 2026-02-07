@@ -132,7 +132,7 @@ BR2_x86_64=y
 BR2_CCACHE=y
 BR2_CCACHE_DIR="/buildroot-src/dl/ccache"
 BR2_CCACHE_USE_BASEDIR=y
-BR2_JLEVEL=0
+BR2_JLEVEL=4
 BR2_TOOLCHAIN_BUILDROOT=y
 BR2_TOOLCHAIN_BUILDROOT_UCLIBC=y
 BR2_KERNEL_HEADERS_6_1=y
@@ -150,6 +150,8 @@ BR2_PACKAGE_NFTABLES=y
 BR2_PACKAGE_WIREGUARD_TOOLS=y
 BR2_PACKAGE_IPROUTE2=y
 BR2_PACKAGE_BASH=y
+BR2_PACKAGE_WGET=y
+BR2_PACKAGE_CA_CERTIFICATES=y
 BR2_PACKAGE_ELFUTILS=y
 BR2_PACKAGE_LLVM=y
 BR2_PACKAGE_CLANG=y
@@ -319,12 +321,34 @@ else
     echo "❌ Kernel NFTables: FALLO"
 fi
 
-# === INICIO DEL AGENTE Z-Lag ===
-echo "🚀 Iniciando Z-Lag Agent..."
-if [ -f "/usr/bin/zlag-agent" ]; then
-    /usr/bin/zlag-agent &
+# === DESCARGA E INICIO DEL AGENTE Z-Lag ===
+AGENT_PATH="/usr/bin/zlag-agent"
+BRAIN_IP="163.176.166.51"
+AGENT_URL="http://$BRAIN_IP:8080/agent/download/zlag-agent-x86_64"
+
+# Si ya hay un agent embebido, usarlo directamente
+if [ -f "$AGENT_PATH" ] && [ -x "$AGENT_PATH" ]; then
+    echo "✅ Agent embebido encontrado, usando versión local"
 else
-    echo "❌ Error: Binario zlag-agent no encontrado"
+    # Descargar agent desde Brain (HTTP, compatible con busybox wget)
+    echo "🚀 Descargando Z-Lag Agent desde Brain ($BRAIN_IP)..."
+    for i in 1 2 3; do
+        if wget -q -O "$AGENT_PATH" "$AGENT_URL"; then
+            chmod +x "$AGENT_PATH"
+            echo "✅ Agent descargado correctamente"
+            break
+        else
+            echo "⚠️ Reintento $i/3..."
+            sleep 2
+        fi
+    done
+fi
+
+if [ -f "$AGENT_PATH" ] && [ -x "$AGENT_PATH" ]; then
+    echo "🚀 Iniciando Z-Lag Agent..."
+    $AGENT_PATH &
+else
+    echo "❌ Error: No se pudo obtener el agent"
 fi
 
 exec /sbin/init

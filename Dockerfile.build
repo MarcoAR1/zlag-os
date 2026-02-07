@@ -51,9 +51,9 @@ RUN set -e && \
     cp /buildroot-src/bin_agents/zlag-agent-${ZLAG_ARCH} output/target/usr/bin/zlag-agent && \
     chmod +x output/target/usr/bin/zlag-agent && \
     \
-    # COMPILACIÓN TOTAL (A darle átomos con 20 hilos)
+    # COMPILACIÓN TOTAL (Limitado a 4 hilos para evitar uso excesivo de CPU)
     echo "[🔨] Iniciando compilación total de Buildroot..." && \
-    make -j$(nproc)
+    make -j4
 
 # 3. Copiamos outputs a /zlag para compatibilidad con Makefile
 RUN mkdir -p /zlag/output/images && \
